@@ -1,0 +1,56 @@
+name: Build release APK
+
+# Сборка запускается при публикации тега версии, например: git tag v1.0 && git push origin v1.0
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Подпись из секретов репозитория (Settings → Secrets and variables → Actions):
+      #   RELEASE_KEYSTORE_BASE64  — base64 от release.jks (base64 -w0 release.jks)
+      #   RELEASE_STORE_PASSWORD, RELEASE_KEY_PASSWORD
+      # Без секретов APK подписывается debug-ключом (так настроен app/build.gradle.kts).
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > release.jks
+            {
+              echo "storeFile=release.jks"
+              echo "storePassword=$STORE_PASSWORD"
+              echo "keyAlias=detoxin_key"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > keystore.properties
+          else
+            echo "::warning::Signing secrets are not set: the APK will be signed with a debug key."
+          fi
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk "detoxin-${GITHUB_REF_NAME}.apk"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: detoxin-${{ github.ref_name }}.apk
+          generate_release_notes: true

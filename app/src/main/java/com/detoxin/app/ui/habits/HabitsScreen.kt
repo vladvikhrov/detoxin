@@ -20,13 +20,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,18 +55,31 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.detoxin.app.ui.about.AboutSheet
 import com.detoxin.app.ui.habits.components.WeekProgressRing
 import kotlin.math.roundToInt
 
 /** Точка входа вкладки «Привычки». */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HabitsScreen(viewModel: HabitsViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val detail by viewModel.detailState.collectAsStateWithLifecycle()
     val detailRange by viewModel.detailRange.collectAsStateWithLifecycle()
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var showAbout by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Привычки") },
+                actions = {
+                    IconButton(onClick = { showAbout = true }) {
+                        Icon(Icons.Outlined.Info, contentDescription = "О приложении")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showAddDialog = true },
@@ -101,6 +118,10 @@ fun HabitsScreen(viewModel: HabitsViewModel = viewModel()) {
         )
     }
 
+    if (showAbout) {
+        AboutSheet(onDismiss = { showAbout = false })
+    }
+
     if (showAddDialog) {
         AddHabitDialog(
             onDismiss = { showAddDialog = false },
@@ -129,9 +150,6 @@ private fun HabitsContent(
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item(key = "title") {
-            Text("Привычки", style = MaterialTheme.typography.headlineMedium)
-        }
         item(key = "overview") {
             PaceOverviewCard(content.overview)
         }

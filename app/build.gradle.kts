@@ -17,6 +17,11 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        val sourceUrl = providers.gradleProperty("detoxin.sourceUrl").getOrElse("")
+        val supportUrl = providers.gradleProperty("detoxin.supportUrl").getOrElse("")
+        buildConfigField("String", "SOURCE_URL", "\"$sourceUrl\"")
+        buildConfigField("String", "SUPPORT_URL", "\"$supportUrl\"")
     }
 
     // Подпись release читается из локального keystore.properties (в .gitignore).
@@ -61,6 +66,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
