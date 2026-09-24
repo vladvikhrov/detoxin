@@ -21,6 +21,12 @@ internal object VkFeedDetector {
         "messenger", "chats", "messages", "profile",
     )
 
+    /** Подписи вкладки сообщений: сюда служба переводит пользователя вместо ленты и клипов. */
+    val messengerKeywords = setOf("мессенджер", "сообщения", "чаты", "messenger", "messages", "chats")
+
+    /** Строки поиска вкладки сообщений через `findAccessibilityNodeInfosByText`. */
+    val messengerQueries: List<String> = listOf("Мессенджер", "Сообщения", "Messenger", "Messages")
+
     /** Строки для системного поиска `findAccessibilityNodeInfosByText`. */
     val anchorQueries: List<String> = listOf("Клипы", "Clips", "Лента", "Главная", "Feed")
 

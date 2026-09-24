@@ -1,10 +1,14 @@
 package com.detoxin.app.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import com.detoxin.app.core.TrackedApp
 import com.detoxin.app.data.local.DatabaseProvider
 import com.detoxin.app.data.local.entity.BlockType
@@ -13,6 +17,8 @@ import com.detoxin.app.overlay.OverlayManager
 import com.detoxin.app.service.detector.NodeTreeScanner
 import com.detoxin.app.service.detector.VkFeedDetector
 import com.detoxin.app.service.detector.YouTubeShortsDetector
+import com.detoxin.app.service.detector.matchesKeyword
+import com.detoxin.app.service.detector.normalizeLabel
 import com.detoxin.app.service.detector.recycleCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -139,7 +145,13 @@ class DetoxinAccessibilityService : AccessibilityService() {
 
     private fun block(packageName: String, blockType: BlockType) {
         suppressedUntil[packageName] = SystemClock.elapsedRealtime() + SUPPRESSION_WINDOW_MS
-        performGlobalAction(GLOBAL_ACTION_BACK)
+        if (packageName == VkFeedDetector.PACKAGE_NAME) {
+            // ВК открывается на «Главной»: «Назад» с неё закрывает приложение целиком.
+            // Вместо этого переводим пользователя в сообщения.
+            if (!clickVkMessengerTab()) openVkMessenger()
+        } else {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        }
         logEventEngine.submit(
             BlockedAttempt(
                 blockType = blockType,
@@ -147,6 +159,66 @@ class DetoxinAccessibilityService : AccessibilityService() {
                 dateEpochDay = LocalDate.now().toEpochDay(),
             )
         )
+    }
+
+    /**
+     * Нажимает вкладку «Мессенджер» в нижней панели ВК. Подпись обычно лежит в некликабельном
+     * TextView, поэтому клик отправляется ближайшему кликабельному предку (до [MAX_CLICK_ANCESTORS]
+     * уровней). Все полученные ноды утилизируются. Выполняется на Dispatchers.Default.
+     */
+    private fun clickVkMessengerTab(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        try {
+            if (root.packageName?.toString() != VkFeedDetector.PACKAGE_NAME) return false
+            for (query in VkFeedDetector.messengerQueries) {
+                val found = root.findAccessibilityNodeInfosByText(query) ?: continue
+                try {
+                    for (node in found) {
+                        val label = node.text?.toString().normalizeLabel()
+                            ?: node.contentDescription?.toString().normalizeLabel()
+                            ?: continue
+                        if (!label.matchesKeyword(VkFeedDetector.messengerKeywords)) continue
+                        if (clickSelfOrAncestor(node)) return true
+                    }
+                } finally {
+                    found.forEach { it.recycleCompat() }
+                }
+            }
+            return false
+        } finally {
+            root.recycleCompat()
+        }
+    }
+
+    /** Клик по ноде или ближайшему кликабельному предку; каждый полученный предок утилизируется. */
+    private fun clickSelfOrAncestor(node: AccessibilityNodeInfo): Boolean {
+        if (node.isClickable) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        var current = node.parent ?: return false
+        try {
+            var depth = 1
+            while (true) {
+                if (current.isClickable) return current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                if (depth++ >= MAX_CLICK_ANCESTORS) return false
+                val next = current.parent ?: return false
+                current.recycleCompat()
+                current = next
+            }
+        } finally {
+            current.recycleCompat()
+        }
+    }
+
+    /** Запасной путь, если вкладку не нашли: ссылка на сообщения, открываемая самим приложением ВК. */
+    private fun openVkMessenger() {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(VK_MESSENGER_URL))
+            .setPackage(VkFeedDetector.PACKAGE_NAME)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "VK cannot open messenger link, falling back to BACK", e)
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        }
     }
 
     private fun isSuppressed(packageName: String): Boolean {
@@ -174,5 +246,7 @@ class DetoxinAccessibilityService : AccessibilityService() {
         const val TAG = "DetoxinA11yService"
         const val SUPPRESSION_WINDOW_MS = 1_200L
         const val SCAN_THROTTLE_MS = 250L
+        const val MAX_CLICK_ANCESTORS = 4
+        const val VK_MESSENGER_URL = "https://vk.com/im"
     }
 }

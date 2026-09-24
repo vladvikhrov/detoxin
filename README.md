@@ -23,7 +23,7 @@
 
 Detoxin обрывает бесконечные ленты, но не отбирает телефон целиком.
 
-- **Блокирует** YouTube Shorts, «Клипы» и «Ленту» ВКонтакте: приложение просто возвращает вас назад.
+- **Блокирует** YouTube Shorts (возвращает назад) и «Клипы» с «Лентой» ВКонтакте (переключает на сообщения).
 - **Сохраняет** то, ради чего вы открыли приложение: сообщения ВКонтакте, профиль и обычные длинные видео на YouTube.
 - **Ограничивает** TikTok (15 минут в час и 1 час в день) и YouTube (1.5 часа в день) экраном отдыха с обратным отсчётом.
 - **Считает время честно** — по системной статистике Android, как «Цифровое благополучие».
@@ -77,7 +77,7 @@ Detoxin бесплатный и без рекламы. Если он вам по
 
 Detoxin cuts infinite feeds without taking your phone away.
 
-- **Blocks** YouTube Shorts and VK "Clips" and "Feed": the app simply navigates you back.
+- **Blocks** YouTube Shorts (navigates back) and VK "Clips" and "Feed" (switches to Messenger).
 - **Keeps** what you actually came for: VK messages, your profile and regular long-form YouTube videos.
 - **Limits** TikTok (15 min per hour, 1 h per day) and YouTube (1.5 h per day) with a rest screen and countdown.
 - **Measures time accurately** from Android's own usage statistics, like Digital Wellbeing.

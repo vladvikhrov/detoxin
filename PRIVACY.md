@@ -24,7 +24,7 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 Служба включается только вами в настройках Android и нужна для основной функции приложения — защиты от бесконечных лент.
 
 - **Что видит:** элементы интерфейса (подписи вкладок, описания элементов, идентификаторы экранов) только в приложениях YouTube (`com.google.android.youtube`), ВКонтакте (`com.vkontakte.android`) и TikTok (`com.zhiliaoapp.musically`).
-- **Зачем:** распознать открытые разделы Shorts, «Клипы» и «Лента» и нажать системную кнопку «Назад»; считать время, проведённое в TikTok и YouTube.
+- **Зачем:** распознать открытые разделы Shorts, «Клипы» и «Лента» и закрыть их: в YouTube служба нажимает системную кнопку «Назад», во ВКонтакте — нажимает вкладку «Мессенджер» (если вкладку найти не удалось, просит само приложение ВК открыть раздел сообщений по ссылке `vk.com/im`); показывать экран лимита.
 - **Проверка активного приложения:** пока открыт TikTok или YouTube, служба раз в секунду узнаёт системное имя (package name) приложения на экране, чтобы понять, когда вы из него вышли. Содержимое других приложений не читается.
 - **Что не делается:** тексты сообщений, комментарии, контакты, видео, пароли и любые данные других приложений не читаются, не сохраняются и не передаются. Анализ экрана происходит в оперативной памяти и сразу отбрасывается; сохраняется только тип блокировки и время.
 
@@ -65,7 +65,7 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 
 Detoxin has **no Internet permission**, no analytics, ads or tracking SDKs. Habits, habit check-ins, TikTok/YouTube session durations (imported from Android's own usage statistics via the usage-access permission you grant) and block events are stored **only on your device** in a local database, excluded from cloud backups and deleted when you uninstall the app. The developer receives no data.
 
-The accessibility service, enabled only by you, inspects on-screen UI elements **only** in YouTube, VK and TikTok to detect Shorts/Clips/Feed and press Back, and to measure time spent in TikTok and YouTube; while one of them is open it checks once per second which app (package name only) is in the foreground. Messages, comments, passwords and data of other apps are never read, stored or transmitted.
+The accessibility service, enabled only by you, inspects on-screen UI elements **only** in YouTube, VK and TikTok to detect Shorts/Clips/Feed and close them (Back in YouTube; switching VK to its Messenger tab) and to show the limit screen; while one of them is open it checks once per second which app (package name only) is in the foreground. Messages, comments, passwords and data of other apps are never read, stored or transmitted.
 
 Other permissions: `SYSTEM_ALERT_WINDOW` for the rest screen, `VIBRATE` for widget haptics; `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE` are added by AndroidX WorkManager for widget updates. Links to the source code and donations open in your own browser.
 
