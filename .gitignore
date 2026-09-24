@@ -1,0 +1,43 @@
+# --- Локальная конфигурация машины (абсолютный путь к SDK) ---
+local.properties
+
+# --- Gradle / Kotlin ---
+.gradle/
+build/
+**/build/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+
+# --- Артефакты сборки ---
+*.apk
+*.aab
+*.ap_
+output-metadata.json
+
+# --- Подписи и секреты: НИКОГДА не коммитить ---
+*.keystore
+*.jks
+keystore.properties
+
+# --- Данные и временные файлы ---
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.log
+*.tmp
+*.bak
+scratchpad/
+
+# --- ОС ---
+.DS_Store
+Thumbs.db
+desktop.ini
