@@ -59,4 +59,8 @@ interface UsageDao {
         """
     )
     suspend fun getDailyTotals(dateEpochDay: Long, packageNames: List<String>): List<PackageUsageSummary>
+
+    /** Удаление записей пакетов начиная с дня [fromDay] (замена данных при переходе на системную статистику). */
+    @Query("DELETE FROM app_usage_logs WHERE packageName IN (:packageNames) AND dateEpochDay >= :fromDay")
+    suspend fun deleteFromDay(packageNames: List<String>, fromDay: Long): Int
 }

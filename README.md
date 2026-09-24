@@ -25,7 +25,8 @@ Detoxin обрывает бесконечные ленты, но не отбир
 
 - **Блокирует** YouTube Shorts, «Клипы» и «Ленту» ВКонтакте: приложение просто возвращает вас назад.
 - **Сохраняет** то, ради чего вы открыли приложение: сообщения ВКонтакте, профиль и обычные длинные видео на YouTube.
-- **Ограничивает** TikTok (1 ч в день) и YouTube (1.5 ч в день) мягким экраном отдыха до полуночи.
+- **Ограничивает** TikTok (15 минут в час и 1 час в день) и YouTube (1.5 часа в день) экраном отдыха с обратным отсчётом.
+- **Считает время честно** — по системной статистике Android, как «Цифровое благополучие».
 - **Помогает** вырабатывать привычки: стрики, темп месяц к месяцу, матрица дней недели и виджет с 30-дневным циклом (например, для контактных линз).
 
 ### Приватность
@@ -33,6 +34,7 @@ Detoxin обрывает бесконечные ленты, но не отбир
 - В приложении **нет разрешения `INTERNET`**, передавать данные ему физически нечем.
 - Нет аналитики, рекламы и телеметрии.
 - Все данные хранятся в локальной базе SQLite на устройстве и не попадают в облачные резервные копии (`allowBackup=false`).
+- Подробно: [политика конфиденциальности](PRIVACY.md).
 
 ### Установка
 
@@ -41,8 +43,11 @@ Detoxin обрывает бесконечные ленты, но не отбир
 После установки:
 
 1. «Настройки → Специальные возможности → Detoxin»: включите службу. Если пункт недоступен на Android 13+: «Приложения → Detoxin → ⋮ → Разрешить ограниченные настройки».
-2. «Приложения → Detoxin → Поверх других приложений»: разрешите показ экрана отдыха.
-3. Добавьте виджет «Привычка Detoxin» на рабочий стол.
+2. «Доступ к истории использования → Detoxin»: включите, чтобы считалось экранное время.
+3. «Приложения → Detoxin → Поверх других приложений»: разрешите показ экрана отдыха.
+4. Добавьте виджет «Привычка Detoxin» на рабочий стол.
+
+При первом запуске приложение само объясняет каждое разрешение и открывает нужные настройки.
 
 **Сборка из исходников** (нужен JDK 17+ и Android SDK):
 
@@ -74,7 +79,8 @@ Detoxin cuts infinite feeds without taking your phone away.
 
 - **Blocks** YouTube Shorts and VK "Clips" and "Feed": the app simply navigates you back.
 - **Keeps** what you actually came for: VK messages, your profile and regular long-form YouTube videos.
-- **Limits** TikTok (1 h/day) and YouTube (1.5 h/day) with a gentle rest screen until midnight.
+- **Limits** TikTok (15 min per hour, 1 h per day) and YouTube (1.5 h per day) with a rest screen and countdown.
+- **Measures time accurately** from Android's own usage statistics, like Digital Wellbeing.
 - **Builds** habits: streaks, month-over-month pace, a weekday matrix and a home-screen widget with a 30-day cycle (e.g. for contact lenses).
 
 ### Privacy
@@ -82,10 +88,11 @@ Detoxin cuts infinite feeds without taking your phone away.
 - The app has **no `INTERNET` permission**, so it has no way to send anything.
 - No analytics, ads or telemetry.
 - All data lives in a local SQLite database on the device and is excluded from cloud backups (`allowBackup=false`).
+- Details: [privacy policy](PRIVACY.md).
 
 ### Install
 
-**Prebuilt APK.** Download `detoxin-vX.Y.apk` from [Releases](https://github.com/vladvikhrov/detoxin/releases) and open it on your phone. Then enable the Detoxin accessibility service, allow "Display over other apps" and add the "Detoxin habit" widget.
+**Prebuilt APK.** Download `detoxin-vX.Y.apk` from [Releases](https://github.com/vladvikhrov/detoxin/releases) and open it on your phone. Then enable the Detoxin accessibility service, grant usage access, allow "Display over other apps" and add the "Detoxin habit" widget. The app explains each permission on first launch.
 
 **Build from source** (JDK 17+ and Android SDK):
 
@@ -109,7 +116,7 @@ Detoxin is free and ad-free. If it helped you, see the links in the Russian sect
 | Layer | Technology |
 |---|---|
 | Interception | `AccessibilityService`: DFS over the node tree (depth ≤ 8, `recycle()` on API < 34), CONFLATED scan channel, 1200 ms anti-loop suppression window |
-| Screen time | Per-app tracker with a 30 s auto-flush, midnight splitting and an ordered write queue on `Dispatchers.IO` |
+| Screen time | `UsageStatsManager` sessions (per-activity tracking), cursor-based sync into Room with midnight splitting; hourly and daily limits |
 | Storage | Room 2.6 + KSP, Flow, explicit migrations (no destructive fallback) |
 | UI | Jetpack Compose, Material 3, bottom navigation |
 | Charts | Pure Compose Canvas: stacked bars, monotone cubic Hermite splines (Fritsch–Carlson), heatmap, weekday frequency bars; geometry cached in `drawWithCache` |
@@ -130,4 +137,4 @@ app/src/main/java/com/detoxin/app/
 
 ## License
 
-[Apache License 2.0](LICENSE)
+Copyright 2026 vladvikhrov. Licensed under the [Apache License 2.0](LICENSE); redistributions must keep the [NOTICE](NOTICE) file.

@@ -22,8 +22,8 @@ internal object AnalyticsAggregator {
     private const val HOURS_PER_DAY = 24
     private const val DAYS_PER_WEEK = 7
 
-    /** Лимит на час в режиме «День»: не более 15 минут соцсетей в час. */
-    const val HOURLY_LIMIT_MS: Long = 15L * 60L * 1_000L
+    /** Лимит на час в режиме «День»: часовой лимит TikTok (15 минут). */
+    val HOURLY_LIMIT_MS: Long = TrackedApp.TIKTOK.hourlyLimitMs ?: (15L * 60L * 1_000L)
 
     /** Дневной лимит в режимах «Неделя» и «Месяц»: суммарный бюджет TikTok (1 ч) + YouTube (1.5 ч). */
     val DAILY_LIMIT_MS: Long = TrackedApp.combinedDailyLimitMs

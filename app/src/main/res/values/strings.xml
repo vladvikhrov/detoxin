@@ -2,9 +2,12 @@
 <resources>
     <string name="app_name">Detoxin</string>
     <string name="accessibility_service_label">Detoxin: защита от бесконечных лент</string>
-    <string name="accessibility_service_description">Detoxin закрывает YouTube Shorts, ленту и клипы ВКонтакте и следит за дневными лимитами TikTok (1 ч) и YouTube (1.5 ч). Все данные хранятся только на устройстве и никуда не передаются.</string>
+    <string name="accessibility_service_description">Detoxin закрывает YouTube Shorts, ленту и клипы ВКонтакте и следит за лимитами TikTok (15 мин в час, 1 ч в день) и YouTube (1.5 ч в день). Все данные хранятся только на устройстве и никуда не передаются.</string>
     <string name="overlay_limit_title">Дневной лимит %1$s (%2$s) исчерпан</string>
     <string name="overlay_limit_message">Приложение снова станет доступно после полуночи. До сброса лимита:</string>
+    <string name="overlay_hourly_title">Часовой лимит %1$s (%2$s) исчерпан</string>
+    <string name="overlay_hourly_message">Можно вернуться в %1$s. До нового часа:</string>
+    <string name="overlay_go_home">На главный экран</string>
     <string name="overlay_timer_minutes">%1$02d:%2$02d</string>
     <string name="overlay_timer_hours">%1$d:%2$02d:%3$02d</string>
     <string name="habit_widget_label">Привычка Detoxin</string>

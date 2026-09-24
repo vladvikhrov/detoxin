@@ -62,7 +62,10 @@ import kotlin.math.roundToInt
 /** Точка входа вкладки «Привычки». */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HabitsScreen(viewModel: HabitsViewModel = viewModel()) {
+fun HabitsScreen(
+    viewModel: HabitsViewModel = viewModel(),
+    onOpenPermissions: () -> Unit = {},
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val detail by viewModel.detailState.collectAsStateWithLifecycle()
     val detailRange by viewModel.detailRange.collectAsStateWithLifecycle()
@@ -119,7 +122,13 @@ fun HabitsScreen(viewModel: HabitsViewModel = viewModel()) {
     }
 
     if (showAbout) {
-        AboutSheet(onDismiss = { showAbout = false })
+        AboutSheet(
+            onDismiss = { showAbout = false },
+            onOpenPermissions = {
+                showAbout = false
+                onOpenPermissions()
+            },
+        )
     }
 
     if (showAddDialog) {

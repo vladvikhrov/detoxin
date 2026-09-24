@@ -1,5 +1,6 @@
 package com.detoxin.app.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -16,10 +17,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import com.detoxin.app.R
 import com.detoxin.app.ui.analytics.AnalyticsScreen
 import com.detoxin.app.ui.habits.HabitsScreen
+import com.detoxin.app.ui.permissions.DisclosurePreferences
+import com.detoxin.app.ui.permissions.PermissionsScreen
 
 /** Вкладки нижней навигации. */
 enum class AppTab(val title: String, @DrawableRes val icon: Int) {
@@ -34,10 +38,33 @@ enum class AppTab(val title: String, @DrawableRes val icon: Int) {
  * собственные Scaffold; отступы корневого Scaffold помечаются как потреблённые
  * (`consumeWindowInsets`), поэтому внутренние Scaffold не добавляют системные отступы повторно.
  * ViewModel обеих вкладок привязаны к Activity и сохраняют состояние при переключении.
+ *
+ * При первом запуске вместо вкладок показывается [PermissionsScreen] (явное раскрытие
+ * разрешений); позже он открывается из баннера «Защита выключена» и из «О приложении».
  */
 @Composable
 fun DetoxinApp() {
+    val context = LocalContext.current
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.USAGE) }
+    var disclosureAccepted by rememberSaveable { mutableStateOf(DisclosurePreferences.isAccepted(context)) }
+    var showPermissions by rememberSaveable { mutableStateOf(false) }
+
+    // Первый запуск: объяснение разрешений показывается до основного интерфейса.
+    if (!disclosureAccepted) {
+        PermissionsScreen(
+            continueLabel = "Продолжить",
+            onContinue = {
+                DisclosurePreferences.setAccepted(context)
+                disclosureAccepted = true
+            },
+        )
+        return
+    }
+    if (showPermissions) {
+        BackHandler { showPermissions = false }
+        PermissionsScreen(continueLabel = "Готово", onContinue = { showPermissions = false })
+        return
+    }
 
     Scaffold(
         bottomBar = {
@@ -60,8 +87,8 @@ fun DetoxinApp() {
                 .consumeWindowInsets(innerPadding),
         ) {
             when (selectedTab) {
-                AppTab.USAGE -> AnalyticsScreen()
-                AppTab.HABITS -> HabitsScreen()
+                AppTab.USAGE -> AnalyticsScreen(onOpenPermissions = { showPermissions = true })
+                AppTab.HABITS -> HabitsScreen(onOpenPermissions = { showPermissions = true })
             }
         }
     }

@@ -1,0 +1,16 @@
+Detoxin
+Copyright 2026 vladvikhrov
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Redistributions of this product, in source or binary form, must retain this
+NOTICE file and the copyright notice above.
+
+"Detoxin" is the name of this project. The Apache License does not grant
+permission to use this name, except as required for reasonable and customary
+use in describing the origin of the work (see section 6 of the License).
+
+This product uses the following open-source libraries, each distributed under
+the Apache License, Version 2.0:
+  - Kotlin and kotlinx.coroutines (JetBrains s.r.o.)
+  - AndroidX: Core, Activity, Lifecycle, Room, Compose, Material 3, Glance
+    (The Android Open Source Project)

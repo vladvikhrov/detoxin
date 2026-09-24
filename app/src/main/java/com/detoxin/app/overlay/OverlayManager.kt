@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.MainThread
@@ -26,10 +27,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** Текст экрана блокировки. */
+/** Текст экрана блокировки; [actionLabel] — подпись кнопки действия (например, «На главный экран»). */
 data class OverlayContent(
     val title: String,
     val message: String,
+    val actionLabel: String? = null,
 )
 
 /**
@@ -55,6 +57,8 @@ class OverlayManager(private val context: Context) {
     private var titleText: TextView? = null
     private var messageText: TextView? = null
     private var timerText: TextView? = null
+    private var actionButton: Button? = null
+    private var onAction: (() -> Unit)? = null
     private var countdownJob: Job? = null
     private var endElapsed: Long = 0L
     private var onFinished: (() -> Unit)? = null
@@ -72,9 +76,15 @@ class OverlayManager(private val context: Context) {
      * @return `false`, если система отказала в добавлении окна.
      */
     @MainThread
-    fun show(content: OverlayContent, endElapsedRealtime: Long, onFinished: (() -> Unit)? = null): Boolean {
+    fun show(
+        content: OverlayContent,
+        endElapsedRealtime: Long,
+        onAction: (() -> Unit)? = null,
+        onFinished: (() -> Unit)? = null,
+    ): Boolean {
         endElapsed = endElapsedRealtime
         this.onFinished = onFinished
+        this.onAction = onAction
         if (overlayView == null) {
             val view = buildView()
             try {
@@ -89,6 +99,10 @@ class OverlayManager(private val context: Context) {
         }
         titleText?.text = content.title
         messageText?.text = content.message
+        actionButton?.apply {
+            text = content.actionLabel.orEmpty()
+            visibility = if (content.actionLabel != null && onAction != null) View.VISIBLE else View.GONE
+        }
         currentContent = content
         startCountdown()
         return true
@@ -117,11 +131,13 @@ class OverlayManager(private val context: Context) {
     @MainThread
     fun release() {
         onFinished = null
+        onAction = null
         hide()
         mainScope.cancel()
     }
 
     private fun clearViewReferences() {
+        actionButton = null
         titleText = null
         messageText = null
         timerText = null
@@ -206,9 +222,17 @@ class OverlayManager(private val context: Context) {
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             gravity = Gravity.CENTER
         }
+        val action = Button(context).apply {
+            isAllCaps = false
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            visibility = View.GONE
+            setOnClickListener { onAction?.invoke() }
+        }
         root.addView(title, wrapContent())
         root.addView(message, wrapContent())
         root.addView(timer, wrapContent())
+        root.addView(action, wrapContent().apply { topMargin = dp(32f) })
+        actionButton = action
         titleText = title
         messageText = message
         timerText = timer
@@ -226,10 +250,11 @@ class OverlayManager(private val context: Context) {
         context.resources.displayMetrics,
     ).toInt()
 
-    /** Контейнер, поглощающий все касания: ни одно событие не проходит к окну под оверлеем. */
+    /**
+     * Контейнер, поглощающий все касания мимо кнопки: ни одно событие не проходит к окну под
+     * оверлеем. Касания не перехватываются у дочерних View, поэтому кнопка действия работает.
+     */
     private class TouchBlockingLayout(context: Context) : LinearLayout(context) {
-        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = true
-
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean = true
     }

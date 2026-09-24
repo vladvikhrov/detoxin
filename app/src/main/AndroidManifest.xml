@@ -8,6 +8,10 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Системная статистика экранного времени; доступ выдаёт пользователь в «Доступе к истории использования». -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <!-- WorkManager (зависимость Glance) добавляет его неявно; сетевые ограничения задач не используются. -->
     <uses-permission
         android:name="android.permission.ACCESS_NETWORK_STATE"

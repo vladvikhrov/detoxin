@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.detoxin.app.data.local.DatabaseProvider
+import com.detoxin.app.usage.UsageSync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -60,6 +62,14 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun selectRange(range: AnalyticsRange) {
         _selectedRange.value = range
+    }
+
+    /**
+     * Перенос свежей системной статистики в базу; графики обновятся сами через Flow Room.
+     * Без доступа к истории использования ничего не делает.
+     */
+    fun syncUsage() {
+        viewModelScope.launch { UsageSync.sync(getApplication()) }
     }
 
     private companion object {

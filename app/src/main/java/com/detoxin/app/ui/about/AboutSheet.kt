@@ -28,7 +28,7 @@ import com.detoxin.app.util.ExternalLinks
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutSheet(onDismiss: () -> Unit) {
+fun AboutSheet(onDismiss: () -> Unit, onOpenPermissions: () -> Unit) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -63,6 +63,9 @@ fun AboutSheet(onDismiss: () -> Unit) {
                 }
             }
 
+            OutlinedButton(onClick = onOpenPermissions, modifier = Modifier.fillMaxWidth()) {
+                Text("Разрешения и как работает защита")
+            }
             if (BuildConfig.SOURCE_URL.isNotBlank()) {
                 OutlinedButton(
                     onClick = { ExternalLinks.open(context, BuildConfig.SOURCE_URL) },
@@ -80,7 +83,7 @@ fun AboutSheet(onDismiss: () -> Unit) {
                 }
             }
             Text(
-                text = "Ссылки открываются во внешнем браузере.",
+                text = "© 2026 vladvikhrov · Apache License 2.0\nСсылки открываются во внешнем браузере.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

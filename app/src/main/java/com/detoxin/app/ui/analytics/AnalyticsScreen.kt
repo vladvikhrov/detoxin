@@ -25,10 +25,12 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
+import com.detoxin.app.ui.permissions.rememberPermissionStatus
 import com.detoxin.app.util.AppHealthMonitor
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
@@ -41,6 +43,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.detoxin.app.ui.analytics.components.HabitHeatmap
@@ -53,10 +56,26 @@ import kotlin.math.roundToInt
 
 /** Точка входа экрана: подписка на состояние с учётом жизненного цикла. */
 @Composable
-fun AnalyticsScreen(viewModel: AnalyticsViewModel = viewModel()) {
+fun AnalyticsScreen(
+    viewModel: AnalyticsViewModel = viewModel(),
+    onOpenPermissions: () -> Unit = {},
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val range by viewModel.selectedRange.collectAsStateWithLifecycle()
-    AnalyticsContent(state = state, selectedRange = range, onRangeSelected = viewModel::selectRange)
+    val permissions = rememberPermissionStatus()
+    // Подтягиваем свежую системную статистику при каждом открытии экрана.
+    LifecycleResumeEffect(Unit) {
+        viewModel.syncUsage()
+        onPauseOrDispose { }
+    }
+    AnalyticsContent(
+        state = state,
+        selectedRange = range,
+        onRangeSelected = viewModel::selectRange,
+        protectionEnabled = permissions.accessibilityEnabled,
+        usageAccessGranted = permissions.usageAccessGranted,
+        onOpenPermissions = onOpenPermissions,
+    )
 }
 
 @Composable
@@ -64,6 +83,9 @@ fun AnalyticsContent(
     state: AnalyticsUiState,
     selectedRange: AnalyticsRange,
     onRangeSelected: (AnalyticsRange) -> Unit,
+    protectionEnabled: Boolean = true,
+    usageAccessGranted: Boolean = true,
+    onOpenPermissions: () -> Unit = {},
 ) {
     Scaffold { innerPadding ->
         Column(
@@ -75,6 +97,22 @@ fun AnalyticsContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text("Аналитика", style = MaterialTheme.typography.headlineMedium)
+            if (!protectionEnabled) {
+                PermissionBanner(
+                    title = "Защита выключена",
+                    text = "Служба специальных возможностей Detoxin не включена: Shorts и клипы не блокируются, " +
+                        "лимиты не срабатывают.",
+                    onOpenPermissions = onOpenPermissions,
+                )
+            }
+            if (!usageAccessGranted) {
+                PermissionBanner(
+                    title = "Экранное время не считается",
+                    text = "Нет доступа к истории использования: без него Detoxin не видит, сколько вы провели " +
+                        "в TikTok и YouTube, и не может применять лимиты.",
+                    onOpenPermissions = onOpenPermissions,
+                )
+            }
             RangeSelector(selectedRange, onRangeSelected)
             when (state) {
                 AnalyticsUiState.Loading -> LoadingState()
@@ -285,6 +323,24 @@ private fun LegendItem(color: Color, label: String) {
         }
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+/** Предупреждение о невыданном разрешении с переходом на экран разрешений. */
+@Composable
+private fun PermissionBanner(title: String, text: String, onOpenPermissions: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(text, style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = onOpenPermissions) { Text("Настроить разрешения") }
+        }
     }
 }
 

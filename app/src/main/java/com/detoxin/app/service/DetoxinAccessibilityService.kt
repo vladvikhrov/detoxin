@@ -33,7 +33,8 @@ import java.util.concurrent.ConcurrentHashMap
  *    для YouTube и VK имя пакета кладётся в CONFLATED-канал анализа экрана.
  *  - Сканер (Dispatchers.Default): единственный воркер снимает дерево нод
  *    ([NodeTreeScanner]), применяет эвристики и при детекте выполняет BACK.
- *  - Запись в БД (Dispatchers.IO): [LogEventEngine] и очередь [AppUsageTracker].
+ *  - Запись в БД (Dispatchers.IO): [LogEventEngine] (блокировки) и синхронизация системной
+ *    статистики экранного времени, которую запускает [AppUsageTracker].
  *
  * YouTube учитывается одновременно двумя механизмами: Shorts закрываются через BACK,
  * а обычные видео честно накапливают экранное время до суточного лимита.
@@ -62,10 +63,10 @@ class DetoxinAccessibilityService : AccessibilityService() {
         overlayManager = OverlayManager(this)
         usageTracker = AppUsageTracker(
             context = this,
-            usageDao = database.usageDao(),
             overlayManager = overlayManager,
             tickerScope = serviceScope,
             foregroundProbe = ::foregroundPackage,
+            onGoHome = { performGlobalAction(GLOBAL_ACTION_HOME) },
         )
 
         serviceScope.launch { scanLoop() }
