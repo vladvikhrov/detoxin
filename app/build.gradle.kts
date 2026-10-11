@@ -15,8 +15,8 @@ android {
         applicationId = "com.detoxin.app"
         minSdk = 29
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
 
         val sourceUrl = providers.gradleProperty("detoxin.sourceUrl").getOrElse("")
         val supportUrl = providers.gradleProperty("detoxin.supportUrl").getOrElse("")
@@ -78,6 +78,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 
+    implementation(libs.androidx.datastore.preferences)
+
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
@@ -97,4 +99,6 @@ dependencies {
     implementation(libs.androidx.glance)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
+
+    testImplementation(libs.junit)
 }

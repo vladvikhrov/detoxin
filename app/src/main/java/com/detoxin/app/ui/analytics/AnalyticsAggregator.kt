@@ -34,10 +34,15 @@ internal object AnalyticsAggregator {
     /** Типы, означающие «спасённое открытие» бесконечной ленты. */
     private val savedOpenTypes = setOf(BlockType.SHORTS, BlockType.VK_CLIPS, BlockType.VK_FEED)
 
+    /**
+     * @param currentHour текущий час: в режиме «День» более поздние часы ещё не наступили,
+     * и линии графиков на них обрываются.
+     */
     fun aggregate(
         range: AnalyticsRange,
         startDay: LocalDate,
         today: LocalDate,
+        currentHour: Int,
         zone: ZoneId,
         usageLogs: List<AppUsageLog>,
         attempts: List<BlockedAttempt>,
@@ -45,12 +50,13 @@ internal object AnalyticsAggregator {
     ): AnalyticsUiState {
         val locale = Locale.getDefault()
         val savedAttempts = attempts.filter { it.blockType in savedOpenTypes }
+        val lastBucket = if (range == AnalyticsRange.DAY) currentHour else bucketCount(range) - 1
 
-        val usage = buildUsage(range, startDay, zone, locale, usageLogs)
-        val blocks = buildBlocks(range, startDay, zone, locale, savedAttempts)
+        val usage = buildUsage(range, startDay, zone, locale, usageLogs, lastBucket)
+        val blocks = buildBlocks(range, startDay, zone, locale, savedAttempts, lastBucket)
         val heatmap = buildHeatmap(startDay, today, zone, habits)
 
-        val totalScreenTime = usage.bars.sumOf { it.totalMs }
+        val totalScreenTime = usage.points.sumOf { it.totalMs ?: 0L }
         if (totalScreenTime == 0L && savedAttempts.isEmpty() && habits.isEmpty()) {
             return AnalyticsUiState.Empty(range)
         }
@@ -77,11 +83,12 @@ internal object AnalyticsAggregator {
         zone: ZoneId,
         locale: Locale,
         logs: List<AppUsageLog>,
+        lastBucket: Int,
     ): UsageChartData {
         val bucketCount = bucketCount(range)
+        val total = LongArray(bucketCount)
         val tikTok = LongArray(bucketCount)
         val youTube = LongArray(bucketCount)
-        val other = LongArray(bucketCount)
 
         for (log in logs) {
             val index = if (range == AnalyticsRange.DAY) {
@@ -90,23 +97,25 @@ internal object AnalyticsAggregator {
                 (log.dateEpochDay - startDay.toEpochDay()).toInt()
             }
             if (index !in 0 until bucketCount) continue
+            total[index] += log.durationMs
             when (log.packageName) {
                 in tikTokPackages -> tikTok[index] += log.durationMs
                 youTubePackage -> youTube[index] += log.durationMs
-                else -> other[index] += log.durationMs
             }
         }
 
-        val bars = List(bucketCount) { index ->
-            UsageBar(
-                label = axisLabel(range, startDay, index, locale),
-                tikTokMs = tikTok[index],
-                youTubeMs = youTube[index],
-                otherMs = other[index],
+        val points = List(bucketCount) { index ->
+            val reached = index <= lastBucket
+            UsagePoint(
+                axisLabel = axisLabel(range, startDay, index, locale),
+                tooltipTitle = tooltipTitle(range, startDay, index, locale),
+                totalMs = total[index].takeIf { reached },
+                tikTokMs = tikTok[index].takeIf { reached },
+                youTubeMs = youTube[index].takeIf { reached },
             )
         }
         val limit = if (range == AnalyticsRange.DAY) HOURLY_LIMIT_MS else DAILY_LIMIT_MS
-        return UsageChartData(bars = bars, limitMs = limit)
+        return UsageChartData(points = points, limitMs = limit)
     }
 
     // ---------- Спасённые открытия ----------
@@ -117,6 +126,7 @@ internal object AnalyticsAggregator {
         zone: ZoneId,
         locale: Locale,
         attempts: List<BlockedAttempt>,
+        lastBucket: Int,
     ): List<BlockPoint> {
         val bucketCount = bucketCount(range)
         val counts = IntArray(bucketCount)
@@ -128,17 +138,11 @@ internal object AnalyticsAggregator {
             }
             if (index in 0 until bucketCount) counts[index]++
         }
-        val dateFormatter = DateTimeFormatter.ofPattern("d MMM, EE", locale)
         return List(bucketCount) { index ->
-            val title = if (range == AnalyticsRange.DAY) {
-                "%02d:00–%02d:00".format(locale, index, (index + 1) % HOURS_PER_DAY)
-            } else {
-                startDay.plusDays(index.toLong()).format(dateFormatter)
-            }
             BlockPoint(
                 axisLabel = axisLabel(range, startDay, index, locale),
-                tooltipTitle = title,
-                count = counts[index],
+                tooltipTitle = tooltipTitle(range, startDay, index, locale),
+                count = counts[index].takeIf { index <= lastBucket },
             )
         }
     }
@@ -155,8 +159,12 @@ internal object AnalyticsAggregator {
         val lastSunday = today.plusDays((DayOfWeek.SUNDAY.value - today.dayOfWeek.value).toLong())
         val weekCount = ((lastSunday.toEpochDay() - firstMonday.toEpochDay() + 1) / DAYS_PER_WEEK).toInt()
 
+        // Отметки за прошлые дни могут быть раньше даты создания привычки: тогда
+        // привычка считается активной с первой отметки.
         val habitCreatedDay = habits.associate { item ->
-            item.habit.id to Instant.ofEpochMilli(item.habit.createdAt).atZone(zone).toLocalDate().toEpochDay()
+            val created = Instant.ofEpochMilli(item.habit.createdAt).atZone(zone).toLocalDate().toEpochDay()
+            val firstCompleted = item.logs.filter { it.isCompleted }.minOfOrNull { it.dateEpochDay }
+            item.habit.id to if (firstCompleted == null) created else minOf(created, firstCompleted)
         }
         // Число выполненных привычек по дню (одна запись на привычку в день гарантирована индексом).
         val completedByDay = HashMap<Long, Int>()
@@ -187,6 +195,13 @@ internal object AnalyticsAggregator {
 
     private fun bucketCount(range: AnalyticsRange): Int =
         if (range == AnalyticsRange.DAY) HOURS_PER_DAY else range.days
+
+    private fun tooltipTitle(range: AnalyticsRange, startDay: LocalDate, index: Int, locale: Locale): String =
+        if (range == AnalyticsRange.DAY) {
+            "%02d:00–%02d:00".format(locale, index, (index + 1) % HOURS_PER_DAY)
+        } else {
+            startDay.plusDays(index.toLong()).format(DateTimeFormatter.ofPattern("d MMM, EE", locale))
+        }
 
     private fun axisLabel(range: AnalyticsRange, startDay: LocalDate, index: Int, locale: Locale): String =
         when (range) {

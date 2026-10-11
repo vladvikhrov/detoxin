@@ -9,30 +9,33 @@ enum class AnalyticsRange(val title: String, val days: Int) {
     MONTH("Месяц", 30),
 }
 
-/** Столбец экранного времени за один бакет (час или день). */
+/**
+ * Экранное время за один бакет (час или день). `null` — бакет ещё не наступил
+ * (будущие часы сегодняшнего дня): линия графика на нём обрывается, а не падает в ноль.
+ * [totalMs] включает и записи прочих пакетов, сохранённые старым трекером.
+ */
 @Immutable
-data class UsageBar(
-    val label: String,
-    val tikTokMs: Long,
-    val youTubeMs: Long,
-    val otherMs: Long,
-) {
-    val totalMs: Long get() = tikTokMs + youTubeMs + otherMs
-}
+data class UsagePoint(
+    val axisLabel: String,
+    val tooltipTitle: String,
+    val totalMs: Long?,
+    val tikTokMs: Long?,
+    val youTubeMs: Long?,
+)
 
 /** @property limitMs лимит экранного времени на один бакет (пунктирная линия). */
 @Immutable
 data class UsageChartData(
-    val bars: List<UsageBar>,
+    val points: List<UsagePoint>,
     val limitMs: Long,
 )
 
-/** Точка кривой спасённых открытий. [tooltipTitle] — дата/час для тултипа. */
+/** Точка кривой спасённых открытий. [tooltipTitle] — дата/час для тултипа; `null` — час ещё не наступил. */
 @Immutable
 data class BlockPoint(
     val axisLabel: String,
     val tooltipTitle: String,
-    val count: Int,
+    val count: Int?,
 )
 
 /**

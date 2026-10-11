@@ -2,11 +2,13 @@ package com.detoxin.app.ui.habits
 
 import com.detoxin.app.data.local.dto.HabitWithLogs
 import com.detoxin.app.data.local.entity.Habit
+import com.detoxin.app.data.local.entity.HabitAutoSource
 import com.detoxin.app.data.local.entity.HabitLog
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.max
@@ -17,12 +19,23 @@ import kotlin.math.roundToInt
  * Чистая (без Android-зависимостей) аналитика привычек. Вызывается на Dispatchers.Default.
  *
  * Все интервалы — закрытые `[start, end]` в `epochDay`. «Активные» дни привычки начинаются
- * с дня её создания: новая привычка не штрафуется за дни, когда её ещё не было.
+ * с дня её создания либо с первой отметки, если её поставили задним числом раньше создания:
+ * новая привычка не штрафуется за дни, когда её ещё не было, а отметки за прошлые дни
+ * учитываются в статистике.
+ *
+ * «Сегодня» не кэшируется: каждый вызов получает актуальную дату от ViewModel, а отметки за
+ * прошлые дни приходят через тот же Flow логов и сразу пересчитывают стрик, неделю и темп.
  */
 internal object HabitStatsCalculator {
 
     /** Привычка считается заброшенной, если не выполнялась столько дней подряд. */
     const val ABANDON_THRESHOLD_DAYS = 7
+
+    /** Насколько далеко назад можно отметить привычку. */
+    const val BACKFILL_WINDOW_DAYS = 60L
+
+    /** Окно скользящей доли выполнения для линии динамики. */
+    private const val ROLLING_WINDOW_DAYS = 7
 
     fun buildContent(
         habits: List<HabitWithLogs>,
@@ -30,6 +43,7 @@ internal object HabitStatsCalculator {
         cycleCounts: Map<Long, Int>,
         today: LocalDate,
         zone: ZoneId,
+        locale: Locale,
     ): HabitsUiState.Content {
         val todayDay = today.toEpochDay()
         val weekStart = startOfWeek(today).toEpochDay()
@@ -46,12 +60,21 @@ internal object HabitStatsCalculator {
                 completedThisWeek = countInRange(completed, weekStart, todayDay),
                 cycleProgress = (cycleCounts[item.habit.id] ?: 0).coerceAtMost(item.habit.cycleLength),
                 cycleLength = item.habit.cycleLength,
+                lastSevenDays = (DAYS_PER_WEEK - 1 downTo 0).map { offset ->
+                    val date = today.minusDays(offset.toLong())
+                    DayMark(
+                        epochDay = date.toEpochDay(),
+                        weekdayLabel = date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale),
+                        isCompleted = date.toEpochDay() in completed,
+                        isToday = offset == 0,
+                    )
+                },
+                isAuto = HabitAutoSource.fromKey(item.habit.autoSource) != null,
             )
         }
 
         val abandoned = habits.mapNotNull { item ->
-            val createdDay = createdDay(item.habit, zone)
-            val reference = lastCompletions[item.habit.id] ?: createdDay
+            val reference = lastCompletions[item.habit.id] ?: createdDay(item.habit, zone)
             val idle = (todayDay - reference).toInt()
             if (idle >= ABANDON_THRESHOLD_DAYS) {
                 AbandonedHabit(item.habit.id, item.habit.title, idle)
@@ -80,43 +103,57 @@ internal object HabitStatsCalculator {
     ): HabitDetailUiState {
         val completed = completedDays(logs)
         val todayDay = today.toEpochDay()
-        val createdDay = createdDay(habit, zone)
+        val activeStart = activeStartDay(habit, completed, zone)
+        val tooltipFormatter = DateTimeFormatter.ofPattern("d MMM, EE", locale)
 
         val rangeStart: LocalDate
-        val bars: List<TrendBar>
+        val trend: List<TrendPoint>
         when (range) {
             HabitRange.WEEK -> {
                 rangeStart = startOfWeek(today)
-                bars = List(DAYS_PER_WEEK) { offset ->
+                trend = List(DAYS_PER_WEEK) { offset ->
                     val date = rangeStart.plusDays(offset.toLong())
-                    dayBar(date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale), date, completed, todayDay)
+                    rollingPoint(
+                        label = date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale),
+                        tooltipTitle = date.format(tooltipFormatter),
+                        date = date,
+                        completed = completed,
+                        activeStart = activeStart,
+                        todayDay = todayDay,
+                    )
                 }
             }
             HabitRange.MONTH -> {
                 rangeStart = today.withDayOfMonth(1)
-                bars = List(today.lengthOfMonth()) { offset ->
+                trend = List(today.lengthOfMonth()) { offset ->
                     val date = rangeStart.plusDays(offset.toLong())
-                    dayBar(date.dayOfMonth.toString(), date, completed, todayDay)
+                    rollingPoint(
+                        label = date.dayOfMonth.toString(),
+                        tooltipTitle = date.format(tooltipFormatter),
+                        date = date,
+                        completed = completed,
+                        activeStart = activeStart,
+                        todayDay = todayDay,
+                    )
                 }
             }
             HabitRange.YEAR -> {
                 rangeStart = today.withDayOfYear(1)
-                bars = List(MONTHS_PER_YEAR) { index ->
+                trend = List(MONTHS_PER_YEAR) { index ->
                     val first = rangeStart.plusMonths(index.toLong())
                     val last = first.withDayOfMonth(first.lengthOfMonth())
-                    val from = max(first.toEpochDay(), createdDay)
+                    val from = max(first.toEpochDay(), activeStart)
                     val to = min(last.toEpochDay(), todayDay)
-                    val value = if (from > to) 0f else countInRange(completed, from, to).toFloat() / (to - from + 1)
-                    TrendBar(
+                    TrendPoint(
                         label = first.month.getDisplayName(TextStyle.NARROW_STANDALONE, locale),
-                        value = value,
-                        isFuture = first.toEpochDay() > todayDay,
+                        tooltipTitle = first.month.getDisplayName(TextStyle.FULL_STANDALONE, locale),
+                        value = if (from > to) null else countInRange(completed, from, to).toFloat() / (to - from + 1),
                     )
                 }
             }
         }
 
-        val activeFrom = max(rangeStart.toEpochDay(), createdDay)
+        val activeFrom = max(rangeStart.toEpochDay(), activeStart)
         val occurrences = IntArray(DAYS_PER_WEEK)
         val hits = IntArray(DAYS_PER_WEEK)
         var day = activeFrom
@@ -140,7 +177,7 @@ internal object HabitStatsCalculator {
             colorHex = habit.colorHex,
             targetDaysPerWeek = habit.targetDaysPerWeek,
             range = range,
-            bars = bars,
+            trend = trend,
             weekdays = weekdays,
             completedInRange = hits.sum(),
             possibleInRange = occurrences.sum(),
@@ -150,12 +187,20 @@ internal object HabitStatsCalculator {
             cycleProgress = cycleCount.coerceAtMost(habit.cycleLength),
             cycleLength = habit.cycleLength,
             cycleStartDay = habit.cycleResetEpochDay.takeIf { it > 0L },
+            completedDays = completed,
+            todayEpochDay = todayDay,
+            backfillFromEpochDay = todayDay - BACKFILL_WINDOW_DAYS,
+            isAuto = HabitAutoSource.fromKey(habit.autoSource) != null,
         )
     }
 
-    /** Самая ранняя дата, логи с которой нужны детальному экрану для любого диапазона. */
+    /**
+     * Самая ранняя дата, логи с которой нужны детальному экрану: начало года или недели,
+     * окно отметок задним числом для календаря и ещё 6 дней на скользящую долю первого дня.
+     */
     fun detailWindowStart(today: LocalDate): LocalDate =
-        minOf(today.withDayOfYear(1), startOfWeek(today))
+        minOf(today.withDayOfYear(1), startOfWeek(today), today.minusDays(BACKFILL_WINDOW_DAYS))
+            .minusDays(ROLLING_WINDOW_DAYS - 1L)
 
     // ---------- Темп месяц-к-месяцу ----------
 
@@ -178,11 +223,12 @@ internal object HabitStatsCalculator {
         var expected = 0.0
         var achieved = 0.0
         for (item in habits) {
-            val from = max(start, createdDay(item.habit, zone))
+            val completed = completedDays(item.logs)
+            val from = max(start, activeStartDay(item.habit, completed, zone))
             if (from > end) continue
             val activeDays = end - from + 1
             val expectedHere = activeDays * item.habit.targetDaysPerWeek / DAYS_PER_WEEK.toDouble()
-            val done = countInRange(completedDays(item.logs), from, end).toDouble()
+            val done = countInRange(completed, from, end).toDouble()
             expected += expectedHere
             achieved += min(done, expectedHere)
         }
@@ -191,9 +237,26 @@ internal object HabitStatsCalculator {
 
     // ---------- Общее ----------
 
-    private fun dayBar(label: String, date: LocalDate, completed: Set<Long>, todayDay: Long): TrendBar {
+    /**
+     * Скользящая доля выполнения за 7 дней, заканчивающихся [date]: линия плавно растёт при
+     * серии отметок и падает при пропусках. Будущие дни и дни до появления привычки — `null`.
+     */
+    private fun rollingPoint(
+        label: String,
+        tooltipTitle: String,
+        date: LocalDate,
+        completed: Set<Long>,
+        activeStart: Long,
+        todayDay: Long,
+    ): TrendPoint {
         val day = date.toEpochDay()
-        return TrendBar(label = label, value = if (day in completed) 1f else 0f, isFuture = day > todayDay)
+        val from = max(day - (ROLLING_WINDOW_DAYS - 1), activeStart)
+        val value = if (day > todayDay || from > day) {
+            null
+        } else {
+            countInRange(completed, from, day).toFloat() / (day - from + 1)
+        }
+        return TrendPoint(label = label, tooltipTitle = tooltipTitle, value = value)
     }
 
     /** Стрик жив, если сегодня ещё не отмечено, но вчера выполнено. */
@@ -215,6 +278,13 @@ internal object HabitStatsCalculator {
 
     private fun createdDay(habit: Habit, zone: ZoneId): Long =
         Instant.ofEpochMilli(habit.createdAt).atZone(zone).toLocalDate().toEpochDay()
+
+    /** День создания или более ранняя отметка, поставленная задним числом. */
+    private fun activeStartDay(habit: Habit, completed: Set<Long>, zone: ZoneId): Long {
+        val created = createdDay(habit, zone)
+        val firstCompleted = completed.minOrNull() ?: return created
+        return min(created, firstCompleted)
+    }
 
     private fun startOfWeek(date: LocalDate): LocalDate =
         date.minusDays((date.dayOfWeek.value - DayOfWeek.MONDAY.value).toLong())

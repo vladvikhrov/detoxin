@@ -11,7 +11,9 @@ import androidx.room.PrimaryKey
  *
  * Цикл использования (например, 30-дневные линзы): прогресс цикла — число выполненных
  * дней начиная с [cycleResetEpochDay] включительно; `0` означает «с момента создания».
- * `defaultValue` совпадает с DDL миграции 1→2, иначе валидация схемы Room не пройдёт.
+ * `defaultValue` совпадает с DDL миграций 1→2 и 2→3, иначе валидация схемы Room не пройдёт.
+ *
+ * [autoSource] — источник автоматических отметок ([HabitAutoSource]); `null` — только ручные.
  */
 @Entity(tableName = "habits")
 data class Habit(
@@ -25,8 +27,24 @@ data class Habit(
     val cycleLength: Int = DEFAULT_CYCLE_LENGTH,
     @ColumnInfo(defaultValue = "0")
     val cycleResetEpochDay: Long = 0L,
+    @ColumnInfo(defaultValue = "NULL")
+    val autoSource: String? = null,
 ) {
     companion object {
         const val DEFAULT_CYCLE_LENGTH = 30
+    }
+}
+
+/**
+ * Источники автоматических отметок. В базе хранится стабильная строка [key], а не `ordinal`.
+ * Ручная отметка всегда приоритетнее: автоматика только добавляет отметку за день, по которому
+ * ещё нет никакой записи.
+ */
+enum class HabitAutoSource(val key: String) {
+    /** «Лёг вовремя»: ночь прошла в пределах ночного лимита и без отключения защиты. */
+    BEDTIME("BEDTIME");
+
+    companion object {
+        fun fromKey(key: String?): HabitAutoSource? = entries.firstOrNull { it.key == key }
     }
 }

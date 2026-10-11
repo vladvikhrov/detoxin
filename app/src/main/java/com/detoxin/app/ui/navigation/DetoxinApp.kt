@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import com.detoxin.app.R
 import com.detoxin.app.ui.analytics.AnalyticsScreen
+import com.detoxin.app.ui.bedtime.BedtimeSettingsScreen
 import com.detoxin.app.ui.habits.HabitsScreen
 import com.detoxin.app.ui.permissions.DisclosurePreferences
 import com.detoxin.app.ui.permissions.PermissionsScreen
@@ -41,6 +42,7 @@ enum class AppTab(val title: String, @DrawableRes val icon: Int) {
  *
  * При первом запуске вместо вкладок показывается [PermissionsScreen] (явное раскрытие
  * разрешений); позже он открывается из баннера «Защита выключена» и из «О приложении».
+ * Настройки «Отбоя» открываются кнопкой с луной на вкладке «Экранное время».
  */
 @Composable
 fun DetoxinApp() {
@@ -48,6 +50,7 @@ fun DetoxinApp() {
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.USAGE) }
     var disclosureAccepted by rememberSaveable { mutableStateOf(DisclosurePreferences.isAccepted(context)) }
     var showPermissions by rememberSaveable { mutableStateOf(false) }
+    var showBedtime by rememberSaveable { mutableStateOf(false) }
 
     // Первый запуск: объяснение разрешений показывается до основного интерфейса.
     if (!disclosureAccepted) {
@@ -63,6 +66,11 @@ fun DetoxinApp() {
     if (showPermissions) {
         BackHandler { showPermissions = false }
         PermissionsScreen(continueLabel = "Готово", onContinue = { showPermissions = false })
+        return
+    }
+    if (showBedtime) {
+        BackHandler { showBedtime = false }
+        BedtimeSettingsScreen(onBack = { showBedtime = false })
         return
     }
 
@@ -87,7 +95,10 @@ fun DetoxinApp() {
                 .consumeWindowInsets(innerPadding),
         ) {
             when (selectedTab) {
-                AppTab.USAGE -> AnalyticsScreen(onOpenPermissions = { showPermissions = true })
+                AppTab.USAGE -> AnalyticsScreen(
+                    onOpenPermissions = { showPermissions = true },
+                    onOpenBedtime = { showBedtime = true },
+                )
                 AppTab.HABITS -> HabitsScreen(onOpenPermissions = { showPermissions = true })
             }
         }

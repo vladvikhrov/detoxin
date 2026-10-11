@@ -1,6 +1,7 @@
 package com.detoxin.app.ui.habits
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +26,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -37,8 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.detoxin.app.ui.common.charts.LineSeries
+import com.detoxin.app.ui.common.charts.ReferenceLine
+import com.detoxin.app.ui.common.charts.TrendBadge
+import com.detoxin.app.ui.common.charts.TrendLineChart
+import com.detoxin.app.ui.common.charts.TrendMath
+import com.detoxin.app.ui.common.charts.TrendMode
 import com.detoxin.app.ui.habits.components.CycleSegmentsBar
-import com.detoxin.app.ui.habits.components.HabitTrendBarChart
+import com.detoxin.app.ui.habits.components.HabitCalendar
 import com.detoxin.app.ui.habits.components.HabitWeekdayFrequencyChart
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -52,6 +61,8 @@ internal fun HabitDetailSheet(
     state: HabitDetailUiState,
     selectedRange: HabitRange,
     onRangeSelected: (HabitRange) -> Unit,
+    onToggleDay: (epochDay: Long) -> Unit,
+    snackbarHostState: SnackbarHostState,
     onTargetChanged: (Int) -> Unit,
     onResetCycle: () -> Unit,
     onDelete: () -> Unit,
@@ -63,69 +74,105 @@ internal fun HabitDetailSheet(
     val color = habitColor(state.colorHex)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(state.title, style = MaterialTheme.typography.headlineSmall)
-            SummaryLine(state)
+        Box {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(state.title, style = MaterialTheme.typography.headlineSmall)
+                SummaryLine(state)
 
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val ranges = HabitRange.entries
-                ranges.forEachIndexed { index, range ->
-                    SegmentedButton(
-                        selected = range == selectedRange,
-                        onClick = { onRangeSelected(range) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = ranges.size),
-                    ) {
-                        Text(range.title)
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val ranges = HabitRange.entries
+                    ranges.forEachIndexed { index, range ->
+                        SegmentedButton(
+                            selected = range == selectedRange,
+                            onClick = { onRangeSelected(range) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = ranges.size),
+                        ) {
+                            Text(range.title)
+                        }
                     }
                 }
+
+                val trendValues = state.trend.map { it.value }
+                SectionTitle(
+                    title = "Динамика",
+                    subtitle = when (state.range) {
+                        HabitRange.WEEK -> "Доля выполнения за 7 дней на каждый день недели"
+                        HabitRange.MONTH -> "Доля выполнения за 7 дней на каждый день месяца"
+                        HabitRange.YEAR -> "Средний % выполнения по месяцам"
+                    },
+                    trailing = {
+                        TrendMath.percentChange(trendValues, TrendMode.ABSOLUTE)?.let { percent ->
+                            TrendBadge(percent = percent, risingIsGood = true)
+                        }
+                    },
+                )
+                TrendLineChart(
+                    series = listOf(LineSeries(label = state.title, color = color, values = trendValues)),
+                    xLabels = state.trend.map { it.label },
+                    tooltipTitles = state.trend.map { it.tooltipTitle },
+                    yFormatter = ::formatPercent,
+                    yMax = 1f,
+                    referenceLine = ReferenceLine(
+                        value = state.targetDaysPerWeek / DAYS_PER_WEEK,
+                        label = "норма ${state.targetDaysPerWeek}/7",
+                    ),
+                    contentDescription = trendDescription(state),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                )
+
+                SectionTitle(
+                    title = "Отметки по дням",
+                    subtitle = "Коснитесь дня, чтобы отметить его задним числом (до ${HabitStatsCalculator.BACKFILL_WINDOW_DAYS} дней назад)" +
+                        if (state.isAuto) ". Ручная отметка важнее автоматической." else "",
+                )
+                HabitCalendar(
+                    completedDays = state.completedDays,
+                    todayEpochDay = state.todayEpochDay,
+                    backfillFromEpochDay = state.backfillFromEpochDay,
+                    color = color,
+                    onToggle = onToggleDay,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                SectionTitle(title = "Дни недели", subtitle = "Сильные и просадочные дни за выбранный период")
+                HabitWeekdayFrequencyChart(
+                    stats = state.weekdays,
+                    strongColor = color,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(210.dp),
+                )
+
+                CycleBlock(state = state, color = color, onReset = { confirmReset = true })
+
+                TargetEditor(target = state.targetDaysPerWeek, onTargetChanged = onTargetChanged)
+
+                OutlinedButton(
+                    onClick = { confirmDelete = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Spacer(Modifier.padding(start = 8.dp))
+                    Text("Удалить привычку")
+                }
+                Spacer(Modifier.height(8.dp))
             }
-
-            SectionTitle(
-                title = "Динамика",
-                subtitle = when (state.range) {
-                    HabitRange.WEEK -> "Выполнение по дням этой недели"
-                    HabitRange.MONTH -> "Выполнение по дням месяца"
-                    HabitRange.YEAR -> "Средний % выполнения по месяцам"
-                },
-            )
-            HabitTrendBarChart(
-                bars = state.bars,
-                barColor = color,
+            SnackbarHost(
+                hostState = snackbarHostState,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding(),
             )
-
-            SectionTitle(title = "Дни недели", subtitle = "Сильные и просадочные дни за выбранный период")
-            HabitWeekdayFrequencyChart(
-                stats = state.weekdays,
-                strongColor = color,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(210.dp),
-            )
-
-            CycleBlock(state = state, color = color, onReset = { confirmReset = true })
-
-            TargetEditor(target = state.targetDaysPerWeek, onTargetChanged = onTargetChanged)
-
-            OutlinedButton(
-                onClick = { confirmDelete = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) {
-                Icon(Icons.Filled.Delete, contentDescription = null)
-                Spacer(Modifier.padding(start = 8.dp))
-                Text("Удалить привычку")
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -249,12 +296,39 @@ private fun CycleBlock(state: HabitDetailUiState, color: Color, onReset: () -> U
 }
 
 @Composable
-private fun SectionTitle(title: String, subtitle: String) {
-    Column {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SectionTitle(title: String, subtitle: String, trailing: @Composable () -> Unit = {}) {
+    Row(verticalAlignment = Alignment.Top) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        trailing()
     }
 }
+
+private fun formatPercent(value: Float): String = "${(value * 100f).roundToInt()}%"
+
+/** Текстовое резюме линии для TalkBack: «Динамика за неделю: снижение с 86% до 57%, норма 71%». */
+private fun trendDescription(state: HabitDetailUiState): String {
+    val values = state.trend.mapNotNull { it.value }
+    val period = when (state.range) {
+        HabitRange.WEEK -> "неделю"
+        HabitRange.MONTH -> "месяц"
+        HabitRange.YEAR -> "год"
+    }
+    val norm = formatPercent(state.targetDaysPerWeek / DAYS_PER_WEEK)
+    if (values.isEmpty()) return "Динамика за $period: пока нет данных. Норма $norm."
+    val first = values.first()
+    val last = values.last()
+    val direction = when {
+        last > first -> "рост"
+        last < first -> "снижение"
+        else -> "без изменений,"
+    }
+    return "Динамика выполнения за $period: $direction с ${formatPercent(first)} до ${formatPercent(last)}. Норма $norm."
+}
+
+private const val DAYS_PER_WEEK = 7f
 
 @Composable
 private fun TargetEditor(target: Int, onTargetChanged: (Int) -> Unit) {

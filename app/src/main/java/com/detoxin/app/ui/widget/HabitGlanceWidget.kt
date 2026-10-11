@@ -122,6 +122,14 @@ class HabitGlanceWidget : GlanceAppWidget() {
     }
 
     companion object {
+        /** Перерисовка всех экземпляров после записи в базу (отметка из приложения или автоматики). */
+        suspend fun refreshAll(context: Context) {
+            val widget = HabitGlanceWidget()
+            GlanceAppWidgetManager(context).getGlanceIds(HabitGlanceWidget::class.java).forEach { glanceId ->
+                widget.update(context, glanceId)
+            }
+        }
+
         /** Сдвигает все экземпляры на новый день (полночь, смена времени или часового пояса). */
         suspend fun refreshAllForNewDay(context: Context) {
             val today = LocalDate.now().toEpochDay()

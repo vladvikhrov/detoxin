@@ -7,6 +7,10 @@ import com.detoxin.app.R
 import com.detoxin.app.core.TrackedApp
 import com.detoxin.app.overlay.OverlayContent
 import com.detoxin.app.overlay.OverlayManager
+import com.detoxin.app.overlay.OverlayStyle
+import com.detoxin.app.usage.BedtimePolicy
+import com.detoxin.app.usage.BedtimeSettings
+import com.detoxin.app.usage.BudgetUsage
 import com.detoxin.app.usage.LimitBlock
 import com.detoxin.app.usage.UsageBudget
 import com.detoxin.app.usage.UsageSnapshot
@@ -35,14 +39,16 @@ import java.time.format.DateTimeFormatter
  * берётся на [Dispatchers.Default] не чаще раза в [SNAPSHOT_INTERVAL_MS]; между снимками время
  * открытого приложения досчитывается по `elapsedRealtime`. Синхронизация в базу — [UsageSync] на IO.
  *
- * Лимиты: дневной (до полуночи) и часовой (до начала следующего часа). Экран блокировки показан,
- * пока заблокированное приложение на экране, и снимается при уходе из него.
+ * Лимиты: «Отбой» (до подъёма), дневной (до полуночи, а если на неё приходится окно сна — до
+ * подъёма) и часовой (до начала следующего часа). Экран блокировки показан, пока заблокированное
+ * приложение на экране, и снимается при уходе из него.
  */
 class AppUsageTracker(
     private val context: Context,
     private val overlayManager: OverlayManager,
     private val tickerScope: CoroutineScope,
     private val foregroundProbe: () -> String?,
+    private val bedtimeProvider: () -> BedtimeSettings,
     private val onGoHome: () -> Unit,
 ) {
 
@@ -103,8 +109,9 @@ class AppUsageTracker(
         if (nowElapsed - lastSyncElapsed >= SYNC_INTERVAL_MS) requestSync(nowElapsed)
 
         val current = snapshot ?: return
-        val (dayUsed, hourUsed) = usedNow(current, foreground, nowWall, nowElapsed)
-        val block = UsageBudget.decide(foreground, dayUsed, hourUsed, nowWall, zone)
+        val bedtime = bedtimeProvider()
+        val usage = usedNow(current, foreground, bedtime, nowWall, nowElapsed)
+        val block = UsageBudget.decide(foreground, usage, bedtime, nowWall, zone)
         if (block == null || block.untilWall <= nowWall) {
             if (overlayManager.isShowing) overlayManager.hide()
             return
@@ -113,17 +120,25 @@ class AppUsageTracker(
     }
 
     /**
-     * Использовано сегодня и в текущем часу: значения снимка + время с момента снимка, если
-     * приложение было открыто. После смены часа/дня старые значения не переносятся.
+     * Использовано в сутках бюджета, в текущем часу и за текущую ночь: значения снимка + время
+     * с момента снимка, если приложение было открыто. Если граница (сутки, час, окно сна)
+     * сменилась после снимка, старые значения не переносятся.
      */
-    private fun usedNow(current: UsageSnapshot, app: TrackedApp, nowWall: Long, nowElapsed: Long): Pair<Long, Long> {
+    private fun usedNow(
+        current: UsageSnapshot,
+        app: TrackedApp,
+        bedtime: BedtimeSettings,
+        nowWall: Long,
+        nowElapsed: Long,
+    ): BudgetUsage {
         val extra = if (app.packageName in current.openPackages) {
             (nowElapsed - current.takenAtElapsed).coerceAtLeast(0L)
         } else {
             0L
         }
-        val dayStart = UsageBudget.dayStart(nowWall, zone)
+        val dayStart = BedtimePolicy.budgetDayStart(nowWall, zone, bedtime)
         val hourStart = UsageBudget.hourStart(nowWall, zone)
+        val nightStart = BedtimePolicy.currentWindow(nowWall, zone, bedtime)?.startWall
         val day = if (dayStart == current.dayStartWall) {
             (current.dayUsed[app.packageName] ?: 0L) + extra
         } else {
@@ -134,26 +149,50 @@ class AppUsageTracker(
         } else {
             minOf(extra, nowWall - hourStart)
         }
-        return day to hour
+        val night = when {
+            nightStart == null -> 0L
+            nightStart == current.nightStartWall -> current.nightUsedMs + extra
+            else -> minOf(extra, nowWall - nightStart)
+        }
+        return BudgetUsage(dayUsedMs = day, hourUsedMs = hour, nightUsedMs = night)
     }
 
     private fun showBlock(app: TrackedApp, block: LimitBlock, nowWall: Long, nowElapsed: Long) {
+        val until = Instant.ofEpochMilli(block.untilWall).atZone(zone).format(HOUR_FORMAT)
         val content = when (block.kind) {
-            LimitBlock.Kind.DAILY -> OverlayContent(
-                title = context.getString(R.string.overlay_limit_title, app.displayName, app.limitLabel),
-                message = context.getString(R.string.overlay_limit_message),
-                actionLabel = context.getString(R.string.overlay_go_home),
-            )
+            LimitBlock.Kind.BEDTIME -> {
+                val allowance = bedtimeProvider().nightAllowanceMinutes
+                OverlayContent(
+                    title = context.getString(R.string.overlay_bedtime_title),
+                    message = if (allowance > 0) {
+                        context.getString(R.string.overlay_bedtime_allowance_message, allowance, app.displayName, until)
+                    } else {
+                        context.getString(R.string.overlay_bedtime_message, app.displayName, until)
+                    },
+                    actionLabel = context.getString(R.string.overlay_close_app),
+                    style = OverlayStyle.NIGHT,
+                )
+            }
+            LimitBlock.Kind.DAILY -> {
+                val nextMidnight = Instant.ofEpochMilli(nowWall).atZone(zone).toLocalDate().plusDays(1)
+                    .atStartOfDay(zone).toInstant().toEpochMilli()
+                OverlayContent(
+                    title = context.getString(R.string.overlay_limit_title, app.displayName, app.limitLabel),
+                    message = if (block.untilWall == nextMidnight) {
+                        context.getString(R.string.overlay_limit_message)
+                    } else {
+                        context.getString(R.string.overlay_limit_until_message, until)
+                    },
+                    actionLabel = context.getString(R.string.overlay_go_home),
+                )
+            }
             LimitBlock.Kind.HOURLY -> OverlayContent(
                 title = context.getString(
                     R.string.overlay_hourly_title,
                     app.displayName,
                     app.hourlyLimitLabel.orEmpty(),
                 ),
-                message = context.getString(
-                    R.string.overlay_hourly_message,
-                    Instant.ofEpochMilli(block.untilWall).atZone(zone).format(HOUR_FORMAT),
-                ),
+                message = context.getString(R.string.overlay_hourly_message, until),
                 actionLabel = context.getString(R.string.overlay_go_home),
             )
         }
@@ -171,6 +210,7 @@ class AppUsageTracker(
                 nowWall = System.currentTimeMillis(),
                 nowElapsed = SystemClock.elapsedRealtime(),
                 zone = zone,
+                bedtime = bedtimeProvider(),
             )
             withContext(Dispatchers.Main.immediate) { snapshot = fresh }
         }

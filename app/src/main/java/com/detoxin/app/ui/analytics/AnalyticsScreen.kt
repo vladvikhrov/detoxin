@@ -46,12 +46,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.res.painterResource
+import com.detoxin.app.R
 import com.detoxin.app.ui.analytics.components.HabitHeatmap
-import com.detoxin.app.ui.analytics.components.SmoothBezierLineChart
-import com.detoxin.app.ui.analytics.components.StackedBarChart
-import com.detoxin.app.ui.analytics.components.StackedBarDefaults
-import com.detoxin.app.ui.analytics.components.attemptsWord
-import com.detoxin.app.ui.analytics.components.formatMinutesShort
+import com.detoxin.app.ui.common.charts.LineSeries
+import com.detoxin.app.ui.common.charts.ReferenceLine
+import com.detoxin.app.ui.common.charts.TrendBadge
+import com.detoxin.app.ui.common.charts.TrendLineChart
+import com.detoxin.app.ui.common.charts.TrendMath
+import com.detoxin.app.ui.common.charts.TrendMode
+import com.detoxin.app.util.formatDurationShort
 import kotlin.math.roundToInt
 
 /** Точка входа экрана: подписка на состояние с учётом жизненного цикла. */
@@ -59,8 +65,10 @@ import kotlin.math.roundToInt
 fun AnalyticsScreen(
     viewModel: AnalyticsViewModel = viewModel(),
     onOpenPermissions: () -> Unit = {},
+    onOpenBedtime: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val night by viewModel.nightState.collectAsStateWithLifecycle()
     val range by viewModel.selectedRange.collectAsStateWithLifecycle()
     val permissions = rememberPermissionStatus()
     // Подтягиваем свежую системную статистику при каждом открытии экрана.
@@ -70,11 +78,13 @@ fun AnalyticsScreen(
     }
     AnalyticsContent(
         state = state,
+        night = night,
         selectedRange = range,
         onRangeSelected = viewModel::selectRange,
         protectionEnabled = permissions.accessibilityEnabled,
         usageAccessGranted = permissions.usageAccessGranted,
         onOpenPermissions = onOpenPermissions,
+        onOpenBedtime = onOpenBedtime,
     )
 }
 
@@ -83,9 +93,11 @@ fun AnalyticsContent(
     state: AnalyticsUiState,
     selectedRange: AnalyticsRange,
     onRangeSelected: (AnalyticsRange) -> Unit,
+    night: NightStatsUiState? = null,
     protectionEnabled: Boolean = true,
     usageAccessGranted: Boolean = true,
     onOpenPermissions: () -> Unit = {},
+    onOpenBedtime: () -> Unit = {},
 ) {
     Scaffold { innerPadding ->
         Column(
@@ -96,7 +108,12 @@ fun AnalyticsContent(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Аналитика", style = MaterialTheme.typography.headlineMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Аналитика", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = onOpenBedtime) {
+                    Icon(painterResource(R.drawable.ic_bedtime), contentDescription = "Режим «Отбой»")
+                }
+            }
             if (!protectionEnabled) {
                 PermissionBanner(
                     title = "Защита выключена",
@@ -119,6 +136,7 @@ fun AnalyticsContent(
                 is AnalyticsUiState.Empty -> EmptyState(state.range)
                 is AnalyticsUiState.Success -> SuccessContent(state)
             }
+            if (night != null) NightCard(night)
             HealthFooter()
         }
     }
@@ -203,27 +221,55 @@ private fun EmptyState(range: AnalyticsRange) {
 private fun SuccessContent(state: AnalyticsUiState.Success) {
     SummaryRow(state.summary)
 
+    val usageColors = UsageSeriesColors.current()
+    val points = state.usage.points
+    val totals = points.map { point -> point.totalMs?.let(::msToMinutes) }
     val limitCaption = if (state.range == AnalyticsRange.DAY) "в час" else "в день"
+    val periodWord = periodWord(state.range)
     ChartCard(
         title = "Экранное время",
-        subtitle = "Лимит: ${formatMinutesShort(state.usage.limitMs)} $limitCaption",
+        subtitle = "Лимит: ${formatDurationShort(state.usage.limitMs)} $limitCaption · коснитесь графика",
+        trailing = { RangeTrend(state.range, totals, risingIsGood = false) },
     ) {
-        StackedBarChart(
-            data = state.usage,
+        TrendLineChart(
+            series = listOf(
+                LineSeries("Всего", usageColors.total, totals),
+                LineSeries("TikTok", usageColors.tikTok, points.map { point -> point.tikTokMs?.let(::msToMinutes) }),
+                LineSeries("YouTube", usageColors.youTube, points.map { point -> point.youTubeMs?.let(::msToMinutes) }),
+            ),
+            xLabels = points.map { it.axisLabel },
+            tooltipTitles = points.map { it.tooltipTitle },
+            yFormatter = ::formatMinutesValue,
+            minYMax = MIN_USAGE_AXIS_MINUTES,
+            referenceLine = ReferenceLine(
+                value = msToMinutes(state.usage.limitMs),
+                label = "лимит ${formatDurationShort(state.usage.limitMs)}",
+            ),
+            contentDescription = describeLine("Экранное время за $periodWord", totals, ::formatMinutesValue),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp),
         )
         Spacer(Modifier.height(12.dp))
-        UsageLegend()
+        UsageLegend(usageColors)
     }
 
+    val blockValues = state.blocks.map { point -> point.count?.toFloat() }
     ChartCard(
         title = "Спасённые открытия",
         subtitle = "Shorts, Клипы и Лента · коснитесь или проведите по графику",
+        trailing = { RangeTrend(state.range, blockValues, risingIsGood = null) },
     ) {
-        SmoothBezierLineChart(
-            points = state.blocks,
+        TrendLineChart(
+            series = listOf(LineSeries("Спасено", MaterialTheme.colorScheme.primary, blockValues)),
+            xLabels = state.blocks.map { it.axisLabel },
+            tooltipTitles = state.blocks.map { it.tooltipTitle },
+            yFormatter = ::formatCount,
+            tooltipFormatter = { value -> "${value.roundToInt()} ${attemptsWord(value.roundToInt())}" },
+            minYMax = MIN_BLOCKS_AXIS,
+            contentDescription = describeLine("Спасённые открытия за $periodWord", blockValues) { value ->
+                "${value.roundToInt()} ${attemptsWord(value.roundToInt())}"
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp),
@@ -240,6 +286,70 @@ private fun SuccessContent(state: AnalyticsUiState.Success) {
                 .fillMaxWidth()
                 .height(220.dp),
         )
+    }
+}
+
+/** Тренд «вторая половина периода против первой»; для «Дня» (по часам) не показывается. */
+@Composable
+private fun RangeTrend(range: AnalyticsRange, values: List<Float?>, risingIsGood: Boolean?) {
+    if (range == AnalyticsRange.DAY) return
+    val percent = TrendMath.percentChange(values, TrendMode.RELATIVE) ?: return
+    TrendBadge(percent = percent, risingIsGood = risingIsGood)
+}
+
+@Composable
+private fun NightCard(night: NightStatsUiState) {
+    val usageColors = UsageSeriesColors.current()
+    val tikTok = night.points.map { msToMinutes(it.tikTokMs) }
+    val youTube = night.points.map { msToMinutes(it.youTubeMs) }
+    val totals = night.points.map { msToMinutes(it.tikTokMs + it.youTubeMs) }
+    ChartCard(
+        title = "Ночное время",
+        subtitle = "TikTok и YouTube в окно «Отбоя» ${night.windowLabel} · ${night.points.size} ночей",
+        trailing = {
+            TrendMath.percentChange(totals, TrendMode.RELATIVE)?.let { percent ->
+                TrendBadge(percent = percent, risingIsGood = false)
+            }
+        },
+    ) {
+        TrendLineChart(
+            series = listOf(
+                LineSeries("TikTok", usageColors.tikTok, tikTok),
+                LineSeries("YouTube", usageColors.youTube, youTube),
+            ),
+            xLabels = night.points.map { it.axisLabel },
+            tooltipTitles = night.points.map { it.tooltipTitle },
+            yFormatter = ::formatMinutesValue,
+            minYMax = MIN_NIGHT_AXIS_MINUTES,
+            referenceLine = night.allowanceMinutes.takeIf { it > 0 }?.let {
+                ReferenceLine(value = it.toFloat(), label = "ночной лимит $it мин")
+            },
+            contentDescription = describeLine("Ночное время за ${night.points.size} ночей", totals, ::formatMinutesValue),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SummaryTile(
+                label = "Отбой фактически",
+                value = night.averageBedtime ?: "—",
+                caption = night.previousAverageBedtime?.let { "${night.previousPeriodLabel} $it" } ?: "в среднем",
+                modifier = Modifier.weight(1f),
+            )
+            SummaryTile(
+                label = "Чистые ночи",
+                value = "${night.cleanNights}/${night.completedNights}",
+                caption = "без TikTok сверх лимита",
+                modifier = Modifier.weight(1f),
+            )
+            SummaryTile(
+                label = "Защита выкл.",
+                value = "${night.nightsWithGaps}",
+                caption = nightsWord(night.nightsWithGaps),
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
@@ -290,6 +400,7 @@ private fun SummaryTile(
 private fun ChartCard(
     title: String,
     subtitle: String,
+    trailing: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     Card(
@@ -297,7 +408,10 @@ private fun ChartCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(modifier = Modifier.padding(PaddingValues(16.dp))) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                trailing()
+            }
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
             content()
@@ -305,13 +419,42 @@ private fun ChartCard(
     }
 }
 
+/** Цвета линий экранного времени: «Всего» — цвет темы, приложения — узнаваемые фирменные оттенки. */
+private data class UsageSeriesColors(val total: Color, val tikTok: Color, val youTube: Color) {
+    companion object {
+        @Composable
+        fun current() = UsageSeriesColors(
+            total = MaterialTheme.colorScheme.primary,
+            tikTok = TIKTOK_COLOR,
+            youTube = YOUTUBE_COLOR,
+        )
+    }
+}
+
 @Composable
-private fun UsageLegend() {
-    val labels = listOf("TikTok", "YouTube", "Другие")
+private fun UsageLegend(colors: UsageSeriesColors) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        labels.forEachIndexed { index, label ->
-            LegendItem(color = StackedBarDefaults.CalmPalette[index], label = label)
-        }
+        LegendItem(color = colors.total, label = "Всего")
+        LegendItem(color = colors.tikTok, label = "TikTok")
+        LegendItem(color = colors.youTube, label = "YouTube")
+    }
+}
+
+private fun periodWord(range: AnalyticsRange): String = when (range) {
+    AnalyticsRange.DAY -> "сегодня по часам"
+    AnalyticsRange.WEEK -> "неделю"
+    AnalyticsRange.MONTH -> "месяц"
+}
+
+/** «1 ночь», «2 ночи», «5 ночей». */
+private fun nightsWord(count: Int): String {
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return when {
+        mod100 in 11..14 -> "ночей"
+        mod10 == 1 -> "ночь"
+        mod10 in 2..4 -> "ночи"
+        else -> "ночей"
     }
 }
 
@@ -364,6 +507,11 @@ private fun HealthFooter() {
 }
 
 private const val HEALTH_REFRESH_MS = 5_000L
+private const val MIN_USAGE_AXIS_MINUTES = 15f
+private const val MIN_NIGHT_AXIS_MINUTES = 10f
+private const val MIN_BLOCKS_AXIS = 4f
+private val TIKTOK_COLOR = Color(0xFFD6457B)
+private val YOUTUBE_COLOR = Color(0xFFE07A1F)
 
 /** «0 мин», «42 мин», «3 ч 5 мин». */
 private fun formatDuration(ms: Long): String {

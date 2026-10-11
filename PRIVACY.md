@@ -1,6 +1,6 @@
 # Политика конфиденциальности Detoxin · Privacy Policy
 
-Действует с 25 сентября 2026 г. · Effective September 25, 2026
+Действует с 11 октября 2026 г. · Effective October 11, 2026
 
 ## Коротко
 
@@ -10,8 +10,10 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 
 | Данные | Зачем | Где |
 |---|---|---|
-| Привычки: название, цвет, норма в неделю, дата создания, начало 30-дневного цикла | Трекер привычек и виджет | Локальная база SQLite приложения |
-| Отметки выполнения привычек по дням | Стрики, статистика, виджет | Локальная база SQLite |
+| Привычки: название, цвет, норма в неделю, дата создания, начало 30-дневного цикла, признак автоотметки «Лёг вовремя» | Трекер привычек и виджет | Локальная база SQLite приложения |
+| Отметки выполнения привычек по дням (в том числе поставленные задним числом и автоматические) | Стрики, статистика, виджет | Локальная база SQLite |
+| Периоды, когда служба защиты была выключена: только время начала и конца | Итог «Защита была выключена…», статистика ночей, автопривычка «Лёг вовремя» | Локальная база SQLite |
+| Настройки режима «Отбой» (время отбоя и подъёма, ночной лимит) и метка последней активности службы (раз в минуту, пока служба работает) | Ночные ограничения; распознавание случаев, когда процесс службы был остановлен | Локальные настройки приложения (DataStore) |
 | Длительность сессий TikTok и YouTube (приложение, время начала, длительность, дата) — переносится из системной статистики Android | Экранное время, часовые и суточные лимиты | Локальная база SQLite |
 | Факты блокировок (тип: Shorts, «Клипы», «Лента», лимит TikTok; время) | График «Спасённые открытия» | Локальная база SQLite |
 | Привязка виджета к привычке | Работа виджета на рабочем столе | Локальное хранилище виджета |
@@ -33,7 +35,7 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 Специальный доступ, который включается только вами в «Настройки → Доступ к истории использования».
 
 - **Что читает:** системную статистику Android о том, когда открывались приложения (те же данные, что показывает «Цифровое благополучие»).
-- **Что использует:** только время открытия и закрытия TikTok и YouTube — для экранного времени, лимитов (TikTok — 15 минут в час и 1 час в день, YouTube — 1.5 часа в день) и графиков. События других приложений при чтении пропускаются и не сохраняются.
+- **Что использует:** только время открытия и закрытия TikTok и YouTube — для экранного времени, лимитов (TikTok — 15 минут в час и 1 час в день, YouTube — 1.5 часа в день, режим «Отбой»), графиков и итога за период, когда защита была выключена. События других приложений при чтении пропускаются и не сохраняются.
 - **Зачем:** система ведёт статистику постоянно, поэтому время не теряется, даже если прошивка остановит службу специальных возможностей ради экономии батареи.
 
 ## Остальные разрешения
@@ -42,7 +44,9 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 |---|---|
 | `SYSTEM_ALERT_WINDOW` (показ поверх других приложений) | Экран отдыха при исчерпании дневного лимита |
 | `VIBRATE` | Короткий отклик при касании виджета |
-| `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE` | Добавлены системной библиотекой AndroidX WorkManager (используется виджетами Glance) для корректного обновления виджета; сетевого доступа не дают |
+| `POST_NOTIFICATIONS` (Android 13+, запрашивается при включении «Отбоя») | Напоминание за 30 минут до отбоя и итог периода, когда защита была выключена. Уведомления формируются на устройстве |
+| `RECEIVE_BOOT_COMPLETED` | Заново поставить будильники «Отбоя» после перезагрузки |
+| `WAKE_LOCK`, `FOREGROUND_SERVICE` | Добавлены системной библиотекой AndroidX WorkManager (используется виджетами Glance) для корректного обновления виджета; сетевого доступа не дают |
 
 Разрешение `ACCESS_NETWORK_STATE`, которое библиотека добавляет по умолчанию, из приложения намеренно удалено.
 
@@ -63,10 +67,10 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 
 ## Summary (English)
 
-Detoxin has **no Internet permission**, no analytics, ads or tracking SDKs. Habits, habit check-ins, TikTok/YouTube session durations (imported from Android's own usage statistics via the usage-access permission you grant) and block events are stored **only on your device** in a local database, excluded from cloud backups and deleted when you uninstall the app. The developer receives no data.
+Detoxin has **no Internet permission**, no analytics, ads or tracking SDKs. Habits, habit check-ins (including backfilled and automatic ones), Bedtime settings, start/end timestamps of periods when the protection service was off, TikTok/YouTube session durations (imported from Android's own usage statistics via the usage-access permission you grant) and block events are stored **only on your device** in a local database, excluded from cloud backups and deleted when you uninstall the app. The developer receives no data.
 
 The accessibility service, enabled only by you, inspects on-screen UI elements **only** in YouTube, VK and TikTok to detect Shorts/Clips/Feed and close them (Back in YouTube; switching VK to its Messenger tab) and to show the limit screen; while one of them is open it checks once per second which app (package name only) is in the foreground. Messages, comments, passwords and data of other apps are never read, stored or transmitted.
 
-Other permissions: `SYSTEM_ALERT_WINDOW` for the rest screen, `VIBRATE` for widget haptics; `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE` are added by AndroidX WorkManager for widget updates. Links to the source code and donations open in your own browser.
+Other permissions: `SYSTEM_ALERT_WINDOW` for the rest screen, `VIBRATE` for widget haptics, `POST_NOTIFICATIONS` (Android 13+, asked when Bedtime is enabled) for the bedtime reminder and the protection-off report, `RECEIVE_BOOT_COMPLETED` to restore Bedtime alarms after a reboot; `WAKE_LOCK` and `FOREGROUND_SERVICE` are added by AndroidX WorkManager for widget updates. Links to the source code and donations open in your own browser.
 
 Contact: https://github.com/vladvikhrov/detoxin/issues

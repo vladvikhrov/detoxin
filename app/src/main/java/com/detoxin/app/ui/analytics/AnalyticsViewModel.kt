@@ -3,6 +3,7 @@ package com.detoxin.app.ui.analytics
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.detoxin.app.bedtime.BedtimeRepository
 import com.detoxin.app.data.local.DatabaseProvider
 import com.detoxin.app.usage.UsageSync
 import kotlinx.coroutines.Dispatchers
@@ -12,12 +13,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
+import java.util.Locale
 
 /**
  * Единая точка данных экрана аналитики.
@@ -25,7 +30,10 @@ import java.time.ZoneId
  * Смена диапазона через [flatMapLatest] отменяет подписки на старые запросы Room и
  * открывает новые. Room выполняет запросы на своём executor-е, [combine] и агрегация
  * идут на [Dispatchers.Default]. Промежуточный Loading при смене диапазона не выдаётся:
- * экран держит старые данные, пока не придут новые, и графики плавно морфят значения.
+ * экран держит старые данные, пока не придут новые.
+ *
+ * Карточка «Ночное время» ([nightState]) живёт отдельным потоком: она зависит ещё и от настроек
+ * «Отбоя» и при выключенном режиме равна `null`.
  */
 class AnalyticsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -33,6 +41,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     private val usageDao = database.usageDao()
     private val blockedAttemptDao = database.blockedAttemptDao()
     private val habitDao = database.habitDao()
+    private val protectionGapDao = database.protectionGapDao()
 
     private val _selectedRange = MutableStateFlow(AnalyticsRange.WEEK)
     val selectedRange: StateFlow<AnalyticsRange> = _selectedRange.asStateFlow()
@@ -50,7 +59,16 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 blockedAttemptDao.observeAttemptsInRange(start, end),
                 habitDao.observeHabitsWithLogs(start, end),
             ) { usageLogs, attempts, habits ->
-                AnalyticsAggregator.aggregate(range, startDay, today, zone, usageLogs, attempts, habits)
+                AnalyticsAggregator.aggregate(
+                    range = range,
+                    startDay = startDay,
+                    today = today,
+                    currentHour = LocalTime.now(zone).hour,
+                    zone = zone,
+                    usageLogs = usageLogs,
+                    attempts = attempts,
+                    habits = habits,
+                )
             }
         }
         .flowOn(Dispatchers.Default)
@@ -58,6 +76,39 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             initialValue = AnalyticsUiState.Loading,
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val nightState: StateFlow<NightStatsUiState?> = combine(
+        _selectedRange,
+        BedtimeRepository.configFlow(application),
+    ) { range, config -> range to config.effectiveAt(System.currentTimeMillis()) }
+        .distinctUntilChanged()
+        .flatMapLatest { (range, settings) ->
+            if (!settings.enabled || !settings.hasWindow) return@flatMapLatest flowOf(null)
+            val zone = ZoneId.systemDefault()
+            val nights = NightStatsCalculator.nightCount(range)
+            val first = NightStatsCalculator.firstWindow(nights, settings, System.currentTimeMillis(), zone)
+            combine(
+                usageDao.observeLogsInRange(first.startDate.toEpochDay(), LocalDate.now(zone).toEpochDay()),
+                protectionGapDao.observeOverlapping(first.startWall, Long.MAX_VALUE),
+            ) { logs, gaps ->
+                NightStatsCalculator.build(
+                    settings = settings,
+                    nights = nights,
+                    logs = logs,
+                    gaps = gaps,
+                    nowWall = System.currentTimeMillis(),
+                    zone = zone,
+                    locale = Locale.getDefault(),
+                )
+            }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            initialValue = null,
         )
 
     fun selectRange(range: AnalyticsRange) {

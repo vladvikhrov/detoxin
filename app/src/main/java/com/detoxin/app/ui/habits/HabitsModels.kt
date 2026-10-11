@@ -21,6 +21,27 @@ data class HabitItemUi(
     val completedThisWeek: Int,
     val cycleProgress: Int,
     val cycleLength: Int,
+    /** Последние 7 дней (сегодня — последний) для быстрой отметки прошедших дней. */
+    val lastSevenDays: List<DayMark>,
+    /** Привычка отмечается автоматически («Лёг вовремя»). */
+    val isAuto: Boolean,
+)
+
+/** День в ряду быстрой отметки. [weekdayLabel] — «Пн», «Вт»… */
+@Immutable
+data class DayMark(
+    val epochDay: Long,
+    val weekdayLabel: String,
+    val isCompleted: Boolean,
+    val isToday: Boolean,
+)
+
+/** Снятая отметка, которую можно вернуть кнопкой «Отменить» в Snackbar. */
+@Immutable
+data class UncheckedDay(
+    val habitId: Long,
+    val habitTitle: String,
+    val epochDay: Long,
 )
 
 /**
@@ -52,12 +73,15 @@ sealed interface HabitsUiState {
     ) : HabitsUiState
 }
 
-/** Столбец динамики: [value] — доля выполнения в `[0, 1]`, [isFuture] — период ещё не наступил. */
+/**
+ * Точка линии динамики: [value] — доля выполнения в `[0, 1]`; `null` — период ещё не наступил
+ * или привычки тогда не было (линия обрывается, а не падает в ноль).
+ */
 @Immutable
-data class TrendBar(
+data class TrendPoint(
     val label: String,
-    val value: Float,
-    val isFuture: Boolean,
+    val tooltipTitle: String,
+    val value: Float?,
 )
 
 /** Доля выполнения для одного дня недели; `null` — день ни разу не попал в интервал. */
@@ -74,7 +98,7 @@ data class HabitDetailUiState(
     val colorHex: Long,
     val targetDaysPerWeek: Int,
     val range: HabitRange,
-    val bars: List<TrendBar>,
+    val trend: List<TrendPoint>,
     val weekdays: List<WeekdayStat>,
     val completedInRange: Int,
     val possibleInRange: Int,
@@ -85,4 +109,10 @@ data class HabitDetailUiState(
     val cycleLength: Int,
     /** День начала текущего цикла; `null` — цикл идёт с момента создания привычки. */
     val cycleStartDay: Long?,
+    /** Выполненные дни в загруженном окне — для календаря отметок. */
+    val completedDays: Set<Long>,
+    val todayEpochDay: Long,
+    /** Самый ранний день, который можно отметить задним числом. */
+    val backfillFromEpochDay: Long,
+    val isAuto: Boolean,
 )

@@ -36,10 +36,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,8 +63,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.detoxin.app.data.local.entity.HabitAutoSource
 import com.detoxin.app.ui.about.AboutSheet
+import com.detoxin.app.ui.habits.components.DayMarkStrip
 import com.detoxin.app.ui.habits.components.WeekProgressRing
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** Точка входа вкладки «Привычки». */
@@ -71,8 +85,29 @@ fun HabitsScreen(
     val detailRange by viewModel.detailRange.collectAsStateWithLifecycle()
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
+    val screenSnackbar = remember { SnackbarHostState() }
+    val sheetSnackbar = remember { SnackbarHostState() }
+    val detailOpen by rememberUpdatedState(detail != null)
+
+    // Снятая отметка → «Отменить». Snackbar показывается там, где пользователь сейчас:
+    // в открытой панели привычки или на основном экране.
+    LaunchedEffect(viewModel) {
+        viewModel.undoEvents.collect { day ->
+            val host = if (detailOpen) sheetSnackbar else screenSnackbar
+            launch {
+                host.currentSnackbarData?.dismiss()
+                val result = host.showSnackbar(
+                    message = uncheckedMessage(day),
+                    actionLabel = "Отменить",
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) viewModel.undoUncheck(day)
+            }
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(screenSnackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Привычки") },
@@ -104,6 +139,7 @@ fun HabitsScreen(
                 content = current,
                 contentPadding = innerPadding,
                 onToggle = viewModel::toggleToday,
+                onToggleDay = viewModel::toggleDay,
                 onOpen = viewModel::openDetail,
             )
         }
@@ -114,6 +150,8 @@ fun HabitsScreen(
             state = detailState,
             selectedRange = detailRange,
             onRangeSelected = viewModel::selectRange,
+            onToggleDay = { viewModel.toggleDay(detailState.habitId, it) },
+            snackbarHostState = sheetSnackbar,
             onTargetChanged = { viewModel.updateTarget(detailState.habitId, it) },
             onResetCycle = { viewModel.resetCycle(detailState.habitId) },
             onDelete = { viewModel.deleteHabit(detailState.habitId) },
@@ -134,8 +172,8 @@ fun HabitsScreen(
     if (showAddDialog) {
         AddHabitDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { title, target, color ->
-                viewModel.addHabit(title, target, color)
+            onConfirm = { title, target, color, autoSource ->
+                viewModel.addHabit(title, target, color, autoSource)
                 showAddDialog = false
             },
         )
@@ -147,6 +185,7 @@ private fun HabitsContent(
     content: HabitsUiState.Content,
     contentPadding: PaddingValues,
     onToggle: (Long) -> Unit,
+    onToggleDay: (habitId: Long, epochDay: Long) -> Unit,
     onOpen: (Long) -> Unit,
 ) {
     LazyColumn(
@@ -169,7 +208,12 @@ private fun HabitsContent(
             item(key = "empty") { EmptyHabits() }
         }
         items(content.habits, key = { it.id }) { habit ->
-            HabitCard(habit, onToggle = { onToggle(habit.id) }, onClick = { onOpen(habit.id) })
+            HabitCard(
+                habit = habit,
+                onToggle = { onToggle(habit.id) },
+                onToggleDay = { epochDay -> onToggleDay(habit.id, epochDay) },
+                onClick = { onOpen(habit.id) },
+            )
         }
     }
 }
@@ -223,7 +267,12 @@ private fun AbandonedBanner(habit: AbandonedHabit, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HabitCard(habit: HabitItemUi, onToggle: () -> Unit, onClick: () -> Unit) {
+private fun HabitCard(
+    habit: HabitItemUi,
+    onToggle: () -> Unit,
+    onToggleDay: (epochDay: Long) -> Unit,
+    onClick: () -> Unit,
+) {
     val color = habitColor(habit.colorHex)
     Card(
         modifier = Modifier
@@ -231,40 +280,51 @@ private fun HabitCard(habit: HabitItemUi, onToggle: () -> Unit, onClick: () -> U
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(
-                checked = habit.completedToday,
-                onCheckedChange = { onToggle() },
-                colors = CheckboxDefaults.colors(checkedColor = color, uncheckedColor = color),
-            )
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                Text(
-                    text = habit.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        Column {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = habit.completedToday,
+                    onCheckedChange = { onToggle() },
+                    colors = CheckboxDefaults.colors(checkedColor = color, uncheckedColor = color),
                 )
-                val streakText = if (habit.currentStreak > 0) {
-                    "Стрик: ${habit.currentStreak} ${daysWord(habit.currentStreak)} подряд"
-                } else {
-                    "Стрик не начат"
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    Text(
+                        text = habit.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val streakText = if (habit.currentStreak > 0) {
+                        "Стрик: ${habit.currentStreak} ${daysWord(habit.currentStreak)} подряд"
+                    } else {
+                        "Стрик не начат"
+                    }
+                    val autoText = if (habit.isAuto) " • авто" else ""
+                    Text(
+                        text = "$streakText • цикл ${habit.cycleProgress}/${habit.cycleLength}$autoText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Text(
-                    text = "$streakText • цикл ${habit.cycleProgress}/${habit.cycleLength}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                WeekProgressRing(
+                    completed = habit.completedThisWeek,
+                    target = habit.targetDaysPerWeek,
+                    color = color,
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .size(44.dp),
                 )
             }
-            WeekProgressRing(
-                completed = habit.completedThisWeek,
-                target = habit.targetDaysPerWeek,
+            DayMarkStrip(
+                days = habit.lastSevenDays,
                 color = color,
+                onToggle = onToggleDay,
                 modifier = Modifier
-                    .padding(end = 8.dp)
-                    .size(44.dp),
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
             )
         }
     }
@@ -292,9 +352,10 @@ private fun EmptyHabits() {
 @Composable
 private fun AddHabitDialog(
     onDismiss: () -> Unit,
-    onConfirm: (title: String, target: Int, colorHex: Long) -> Unit,
+    onConfirm: (title: String, target: Int, colorHex: Long, autoSource: HabitAutoSource?) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
+    var autoBedtime by rememberSaveable { mutableStateOf(false) }
     var target by rememberSaveable { mutableFloatStateOf(5f) }
     var colorHex by rememberSaveable { mutableLongStateOf(HabitPalette.first()) }
     val trimmed = title.trim()
@@ -324,11 +385,20 @@ private fun AddHabitDialog(
                 )
                 Text("Цвет", style = MaterialTheme.typography.bodyMedium)
                 ColorPicker(selected = colorHex, onSelected = { colorHex = it })
+                AutoBedtimeOption(
+                    checked = autoBedtime,
+                    onCheckedChange = { checked ->
+                        autoBedtime = checked
+                        if (checked && title.isBlank()) title = BEDTIME_HABIT_TITLE
+                    },
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(trimmed, target.roundToInt(), colorHex) },
+                onClick = {
+                    onConfirm(trimmed, target.roundToInt(), colorHex, if (autoBedtime) HabitAutoSource.BEDTIME else null)
+                },
                 enabled = trimmed.isNotEmpty(),
             ) {
                 Text("Добавить")
@@ -365,6 +435,34 @@ private fun ColorPicker(selected: Long, onSelected: (Long) -> Unit) {
     }
 }
 
+@Composable
+private fun AutoBedtimeOption(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Отмечать автоматически", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "«Лёг вовремя»: утром привычка отметится сама, если ночью в режиме «Отбой» " +
+                    "TikTok и YouTube не открывались дольше ночного лимита, а защиту не выключали.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/** «„Прогулка“: отметка за 3 октября снята». */
+private fun uncheckedMessage(day: UncheckedDay): String {
+    val today = LocalDate.now().toEpochDay()
+    val date = if (day.epochDay == today) {
+        "сегодня"
+    } else {
+        "за " + LocalDate.ofEpochDay(day.epochDay).format(DateTimeFormatter.ofPattern("d MMMM", Locale.getDefault()))
+    }
+    return "«${day.habitTitle}»: отметка $date снята"
+}
+
 private fun formatRate(rate: Float?): String = rate?.let { "${(it * 100f).roundToInt()}%" } ?: "—"
 
 private const val MAX_TITLE_LENGTH = 40
+private const val BEDTIME_HABIT_TITLE = "Лёг вовремя"

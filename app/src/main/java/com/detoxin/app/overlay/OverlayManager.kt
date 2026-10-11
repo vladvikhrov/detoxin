@@ -27,11 +27,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** Оформление экрана блокировки: [NIGHT] — почти чёрный фон «Отбоя», не слепящий в темноте. */
+enum class OverlayStyle { LIMIT, NIGHT }
+
 /** Текст экрана блокировки; [actionLabel] — подпись кнопки действия (например, «На главный экран»). */
 data class OverlayContent(
     val title: String,
     val message: String,
     val actionLabel: String? = null,
+    val style: OverlayStyle = OverlayStyle.LIMIT,
 )
 
 /**
@@ -97,6 +101,7 @@ class OverlayManager(private val context: Context) {
             }
             overlayView = view
         }
+        overlayView?.setBackgroundColor(backgroundFor(content.style))
         titleText?.text = content.title
         messageText?.text = content.message
         actionButton?.apply {
@@ -134,6 +139,11 @@ class OverlayManager(private val context: Context) {
         onAction = null
         hide()
         mainScope.cancel()
+    }
+
+    private fun backgroundFor(style: OverlayStyle): Int = when (style) {
+        OverlayStyle.LIMIT -> BACKGROUND_COLOR
+        OverlayStyle.NIGHT -> NIGHT_BACKGROUND_COLOR
     }
 
     private fun clearViewReferences() {
@@ -262,6 +272,7 @@ class OverlayManager(private val context: Context) {
     private companion object {
         const val TAG = "OverlayManager"
         const val BACKGROUND_COLOR = 0xF2101418.toInt()
+        const val NIGHT_BACKGROUND_COLOR = 0xFC05070D.toInt()
         const val SECONDARY_TEXT_COLOR = 0xFFB8C0CC.toInt()
     }
 }

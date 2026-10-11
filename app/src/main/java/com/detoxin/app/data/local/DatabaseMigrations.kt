@@ -8,6 +8,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * 1 → 2: цикл использования привычки. `ADD COLUMN` с `NOT NULL DEFAULT` мгновенно
  * заполняет существующие строки: цикл 30 дней, отсчёт с момента создания привычки.
+ *
+ * 2 → 3: режим «Отбой». Колонка `habits.autoSource` (источник автоотметок, по умолчанию `NULL`)
+ * и таблица `protection_gaps` — периоды, когда служба защиты была выключена.
+ * DDL совпадает с тем, что генерирует Room для [com.detoxin.app.data.local.entity.ProtectionGap].
  */
 internal object DatabaseMigrations {
 
@@ -18,5 +22,21 @@ internal object DatabaseMigrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2)
+    val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE habits ADD COLUMN autoSource TEXT DEFAULT NULL")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `protection_gaps` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`startedAtWall` INTEGER NOT NULL, " +
+                    "`endedAtWall` INTEGER)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_protection_gaps_startedAtWall` " +
+                    "ON `protection_gaps` (`startedAtWall`)"
+            )
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 }

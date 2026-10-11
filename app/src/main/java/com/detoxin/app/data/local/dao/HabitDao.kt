@@ -136,24 +136,59 @@ abstract class HabitDao {
     )
     protected abstract suspend fun invertCompletion(habitId: Long, dateEpochDay: Long): Int
 
+    @Query(
+        """
+        UPDATE habit_logs
+        SET isCompleted = :isCompleted
+        WHERE habitId = :habitId AND dateEpochDay = :dateEpochDay
+        """
+    )
+    protected abstract suspend fun updateCompletion(habitId: Long, dateEpochDay: Long, isCompleted: Boolean): Int
+
     /**
-     * Атомарный toggle отметки привычки за день.
+     * Атомарный toggle отметки привычки за день (сегодня или любой прошлый).
      *
      * Если записи нет — создаётся со статусом `true`; иначе `isCompleted` инвертируется.
      * SQL-UPSERT (`ON CONFLICT DO UPDATE`) недоступен: он появился в SQLite 3.24, а на
      * API 29 (minSdk) поставляется SQLite 3.22. Поэтому используется пара
      * `INSERT OR IGNORE` + `UPDATE` внутри одной транзакции — без гонок между
      * AccessibilityService, виджетом и UI.
+     *
+     * @return новое состояние отметки — по нему UI решает, предлагать ли «Отменить».
      */
     @Transaction
-    open suspend fun toggleHabit(habitId: Long, dateEpochDay: Long) {
+    open suspend fun toggleHabit(habitId: Long, dateEpochDay: Long): Boolean {
         val rowId = insertLogIfAbsent(
             HabitLog(habitId = habitId, dateEpochDay = dateEpochDay, isCompleted = true)
         )
-        if (rowId == -1L) {
-            invertCompletion(habitId, dateEpochDay)
-        }
+        if (rowId != -1L) return true
+        invertCompletion(habitId, dateEpochDay)
+        return getCompletion(habitId, dateEpochDay) == true
     }
+
+    /**
+     * Идемпотентная установка отметки (для «Отменить»): повторное нажатие не превращается
+     * в повторный toggle, даже если пользователь успел коснуться дня ещё раз.
+     */
+    @Transaction
+    open suspend fun setCompletion(habitId: Long, dateEpochDay: Long, isCompleted: Boolean) {
+        val rowId = insertLogIfAbsent(
+            HabitLog(habitId = habitId, dateEpochDay = dateEpochDay, isCompleted = isCompleted)
+        )
+        if (rowId == -1L) updateCompletion(habitId, dateEpochDay, isCompleted)
+    }
+
+    /**
+     * Автоматическая отметка: только если за день ещё нет никакой записи. Ручное решение
+     * (в том числе снятая отметка, которая хранится как `isCompleted = 0`) не перезаписывается.
+     * @return `true`, если отметка добавлена.
+     */
+    open suspend fun markCompletedIfAbsent(habitId: Long, dateEpochDay: Long): Boolean =
+        insertLogIfAbsent(HabitLog(habitId = habitId, dateEpochDay = dateEpochDay, isCompleted = true)) != -1L
+
+    /** Привычки с автоматическими отметками из источника [autoSource]. */
+    @Query("SELECT * FROM habits WHERE autoSource = :autoSource ORDER BY createdAt ASC, id ASC")
+    abstract suspend fun getHabitsWithAutoSource(autoSource: String): List<Habit>
 
     // ---------- Habits with logs ----------
 

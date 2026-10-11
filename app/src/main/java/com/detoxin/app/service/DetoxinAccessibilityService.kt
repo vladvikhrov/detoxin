@@ -9,6 +9,9 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.detoxin.app.bedtime.BedtimeHabitEvaluator
+import com.detoxin.app.bedtime.BedtimeRepository
+import com.detoxin.app.bedtime.BedtimeScheduler
 import com.detoxin.app.core.TrackedApp
 import com.detoxin.app.data.local.DatabaseProvider
 import com.detoxin.app.data.local.entity.BlockType
@@ -20,14 +23,17 @@ import com.detoxin.app.service.detector.YouTubeShortsDetector
 import com.detoxin.app.service.detector.matchesKeyword
 import com.detoxin.app.service.detector.normalizeLabel
 import com.detoxin.app.service.detector.recycleCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -47,6 +53,12 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Anti-Loop: после BACK пакет попадает в [suppressedUntil] на [SUPPRESSION_WINDOW_MS];
  * события этого пакета не анализируются, пока закрываемый экран анимируется.
+ *
+ * «Отбой»: настройки читаются из горячего StateFlow [BedtimeRepository.state] без обращения к
+ * диску. Детекторы Shorts, «Клипов» и «Ленты» работают круглосуточно, поэтому ночью они
+ * действуют так же, как днём; ночной лимит добавляется к ним через [AppUsageTracker].
+ * Подключение и остановка службы фиксируются [ProtectionMonitor] — так видно, если защиту
+ * выключили, чтобы обойти «Отбой».
  */
 class DetoxinAccessibilityService : AccessibilityService() {
 
@@ -65,6 +77,7 @@ class DetoxinAccessibilityService : AccessibilityService() {
         powerManager = getSystemService(PowerManager::class.java)
 
         val database = DatabaseProvider.getDatabase(this)
+        val bedtimeState = BedtimeRepository.state(this)
         logEventEngine = LogEventEngine(database.blockedAttemptDao())
         overlayManager = OverlayManager(this)
         usageTracker = AppUsageTracker(
@@ -72,10 +85,37 @@ class DetoxinAccessibilityService : AccessibilityService() {
             overlayManager = overlayManager,
             tickerScope = serviceScope,
             foregroundProbe = ::foregroundPackage,
+            bedtimeProvider = { bedtimeState.value.effectiveAt(System.currentTimeMillis()) },
             onGoHome = { performGlobalAction(GLOBAL_ACTION_HOME) },
         )
 
         serviceScope.launch { scanLoop() }
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                // Сначала итог разрыва (он читает последний heartbeat), затем новые heartbeat.
+                ProtectionMonitor.onProtectionStarted(this@DetoxinAccessibilityService, System.currentTimeMillis(), ZoneId.systemDefault())
+                BedtimeScheduler.rescheduleFromStore(this@DetoxinAccessibilityService)
+                BedtimeHabitEvaluator.evaluate(this@DetoxinAccessibilityService, System.currentTimeMillis(), ZoneId.systemDefault())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Protection start bookkeeping failed", e)
+            }
+            while (isActive) {
+                ProtectionMonitor.heartbeat(this@DetoxinAccessibilityService, System.currentTimeMillis())
+                delay(ProtectionMonitor.HEARTBEAT_INTERVAL_MS)
+            }
+        }
+    }
+
+    /** Служба выключена в настройках: фиксируем начало разрыва защиты. */
+    override fun onUnbind(intent: Intent?): Boolean {
+        ProtectionMonitor.onProtectionStopping(this)
+        return super.onUnbind(intent)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -100,6 +140,7 @@ class DetoxinAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        ProtectionMonitor.onProtectionStopping(this)
         usageTracker.stop()
         overlayManager.release()
         scanRequests.close()
