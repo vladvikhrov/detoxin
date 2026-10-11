@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.detoxin.app.bedtime.BedtimeRepository
 import com.detoxin.app.bedtime.BedtimeScheduler
+import com.detoxin.app.ui.widget.ScreenTimeWidget
 import com.detoxin.app.usage.BedtimePolicy
 import com.detoxin.app.usage.BedtimeSettings
 import kotlinx.coroutines.CancellationException
@@ -78,6 +79,7 @@ class BedtimeViewModel(application: Application) : AndroidViewModel(application)
                 val now = System.currentTimeMillis()
                 val result = BedtimeRepository.update(context, requested, now, zone)
                 BedtimeScheduler.reschedule(context, result, now, zone)
+                ScreenTimeWidget.refreshAll(context)
                 val pending = result.pendingAt(now)
                 messageChannel.send(
                     if (pending != null) {

@@ -17,4 +17,8 @@
     <string name="overlay_timer_hours">%1$d:%2$02d:%3$02d</string>
     <string name="habit_widget_label">Привычка Detoxin</string>
     <string name="habit_widget_description">Отмечайте привычку за сегодня одним касанием прямо с рабочего стола.</string>
+    <string name="habit_week_widget_label">Неделя привычки</string>
+    <string name="habit_week_widget_description">Последние 7 дней привычки: касанием отмечайте сегодня и прошедшие дни.</string>
+    <string name="screen_time_widget_label">Detoxin: сегодня</string>
+    <string name="screen_time_widget_description">Сколько сегодня ушло на TikTok и YouTube относительно лимитов и когда начнётся «Отбой».</string>
 </resources>

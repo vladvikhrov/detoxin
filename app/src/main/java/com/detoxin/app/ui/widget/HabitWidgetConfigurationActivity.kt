@@ -139,11 +139,18 @@ class HabitWidgetConfigurationActivity : ComponentActivity() {
                     prefs[HabitWidgetKeys.RefreshDay] = today
                 }
             }
-            HabitGlanceWidget().update(applicationContext, glanceId)
+            // Экран общий для 1×1 и «Недели привычки»: перерисовываем тот виджет, который настраивается.
+            val provider = AppWidgetManager.getInstance(applicationContext).getAppWidgetInfo(appWidgetId)?.provider
+            val widget = if (provider?.className == HabitWeekWidgetReceiver::class.java.name) {
+                HabitWeekWidget()
+            } else {
+                HabitGlanceWidget()
+            }
+            widget.update(applicationContext, glanceId)
             setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId))
         } catch (e: IllegalArgumentException) {
             // Экземпляр виджета удалён с рабочего стола, пока открыт экран.
-            Log.w(TAG, "App widget $appWidgetId is not bound to HabitGlanceWidget", e)
+            Log.w(TAG, "App widget $appWidgetId is not bound to a Detoxin habit widget", e)
         } finally {
             finish()
         }

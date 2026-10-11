@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.detoxin.app.ui.widget.ScreenTimeWidget
 import com.detoxin.app.usage.BedtimePolicy
 import com.detoxin.app.util.ProcessScope
 import kotlinx.coroutines.CancellationException
@@ -56,6 +57,8 @@ class BedtimeAlarmReceiver : BroadcastReceiver() {
             }
         }
         BedtimeScheduler.rescheduleFromStore(context)
+        // Строка «Отбой в / до …» в виджете «Сегодня» меняется на подъёме и перед отбоем.
+        ScreenTimeWidget.refreshAll(context)
     }
 
     private companion object {

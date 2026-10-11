@@ -67,6 +67,30 @@
                 android:resource="@xml/habit_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".ui.widget.HabitWeekWidgetReceiver"
+            android:exported="true"
+            android:label="@string/habit_week_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/habit_week_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ui.widget.ScreenTimeWidgetReceiver"
+            android:exported="true"
+            android:label="@string/screen_time_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/screen_time_widget_info" />
+        </receiver>
+
         <!-- Будильники «Отбоя»; системные события доставляются и неэкспортированному ресиверу. -->
         <receiver
             android:name=".bedtime.BedtimeAlarmReceiver"

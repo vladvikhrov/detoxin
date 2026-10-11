@@ -14,5 +14,14 @@ internal object HabitWidgetKeys {
      */
     val RefreshDay = longPreferencesKey("refresh_epoch_day")
 
+    /**
+     * Метка последнего запроса обновления у виджетов без реактивного источника («Сегодня»):
+     * новое значение перезапускает чтение данных в активной Glance-сессии.
+     */
+    val RefreshTick = longPreferencesKey("refresh_tick")
+
     val HabitIdParam = ActionParameters.Key<Long>("habit_id")
+
+    /** День, который отмечает касание в виджете «Неделя привычки». */
+    val EpochDayParam = ActionParameters.Key<Long>("epoch_day")
 }

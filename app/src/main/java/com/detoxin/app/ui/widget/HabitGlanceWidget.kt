@@ -122,24 +122,42 @@ class HabitGlanceWidget : GlanceAppWidget() {
     }
 
     companion object {
-        /** Перерисовка всех экземпляров после записи в базу (отметка из приложения или автоматики). */
+        /**
+         * Перерисовка всех виджетов привычек (1×1 и «Неделя привычки») после записи в базу:
+         * отметка из приложения, другого виджета или автоматики.
+         */
         suspend fun refreshAll(context: Context) {
-            val widget = HabitGlanceWidget()
-            GlanceAppWidgetManager(context).getGlanceIds(HabitGlanceWidget::class.java).forEach { glanceId ->
-                widget.update(context, glanceId)
-            }
+            val manager = GlanceAppWidgetManager(context)
+            val single = HabitGlanceWidget()
+            manager.getGlanceIds(HabitGlanceWidget::class.java).forEach { single.update(context, it) }
+            val week = HabitWeekWidget()
+            manager.getGlanceIds(HabitWeekWidget::class.java).forEach { week.update(context, it) }
         }
 
-        /** Сдвигает все экземпляры на новый день (полночь, смена времени или часового пояса). */
+        /**
+         * Сдвигает все виджеты Detoxin на новый день (полночь, смена времени или часового пояса):
+         * 1×1 и «Неделя привычки» получают новый день, «Сегодня» перечитывает статистику.
+         */
         suspend fun refreshAllForNewDay(context: Context) {
             val today = LocalDate.now().toEpochDay()
-            val widget = HabitGlanceWidget()
-            val glanceIds = GlanceAppWidgetManager(context).getGlanceIds(HabitGlanceWidget::class.java)
-            for (glanceId in glanceIds) {
+            val manager = GlanceAppWidgetManager(context)
+            val single = HabitGlanceWidget()
+            val singleIds = manager.getGlanceIds(HabitGlanceWidget::class.java)
+            for (glanceId in singleIds) {
                 updateAppWidgetState(context, glanceId) { prefs -> prefs[HabitWidgetKeys.RefreshDay] = today }
-                widget.update(context, glanceId)
+                single.update(context, glanceId)
             }
-            if (glanceIds.isNotEmpty()) MidnightRefreshScheduler.schedule(context)
+            val week = HabitWeekWidget()
+            val weekIds = manager.getGlanceIds(HabitWeekWidget::class.java)
+            for (glanceId in weekIds) {
+                updateAppWidgetState(context, glanceId) { prefs -> prefs[HabitWidgetKeys.RefreshDay] = today }
+                week.update(context, glanceId)
+            }
+            ScreenTimeWidget.refreshAll(context)
+            val screenTimeIds = manager.getGlanceIds(ScreenTimeWidget::class.java)
+            if (singleIds.isNotEmpty() || weekIds.isNotEmpty() || screenTimeIds.isNotEmpty()) {
+                MidnightRefreshScheduler.schedule(context)
+            }
         }
 
         private suspend fun loadSnapshot(dao: HabitDao, habitId: Long?, day: Long): HabitWidgetState {

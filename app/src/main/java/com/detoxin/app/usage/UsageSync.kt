@@ -5,6 +5,7 @@ import android.util.Log
 import com.detoxin.app.core.TrackedApp
 import com.detoxin.app.data.local.DatabaseProvider
 import com.detoxin.app.data.local.entity.AppUsageLog
+import com.detoxin.app.ui.widget.ScreenTimeWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -24,6 +25,7 @@ import java.time.ZoneId
  * Первый запуск заменяет сегодняшние записи старого трекера (он терял время при остановке службы)
  * точными данными системы; прошлые дни не трогаются.
  * Mutex защищает от одновременного запуска из службы и экрана аналитики (один процесс).
+ * После успешной синхронизации обновляется виджет «Сегодня».
  */
 object UsageSync {
 
@@ -42,6 +44,7 @@ object UsageSync {
             if (!UsageStatsReader.hasAccess(appContext)) return@withLock false
             try {
                 syncLocked(appContext)
+                ScreenTimeWidget.refreshAll(appContext)
                 true
             } catch (e: CancellationException) {
                 throw e

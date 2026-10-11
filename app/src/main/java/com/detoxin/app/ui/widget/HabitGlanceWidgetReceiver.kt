@@ -42,7 +42,7 @@ class HabitGlanceWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        MidnightRefreshScheduler.cancel(context)
+        MidnightRefreshScheduler.cancelIfNoWidgets(context)
     }
 
     private companion object {

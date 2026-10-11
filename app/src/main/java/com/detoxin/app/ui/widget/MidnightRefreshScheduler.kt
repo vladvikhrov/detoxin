@@ -2,6 +2,8 @@ package com.detoxin.app.ui.widget
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import java.time.LocalDate
@@ -35,6 +37,18 @@ internal object MidnightRefreshScheduler {
 
     fun cancel(context: Context) {
         context.getSystemService(AlarmManager::class.java)?.cancel(pendingIntent(context))
+    }
+
+    /** Снять будильник, только если на рабочем столе не осталось ни одного виджета Detoxin. */
+    fun cancelIfNoWidgets(context: Context) {
+        val manager = AppWidgetManager.getInstance(context) ?: return
+        val receivers = listOf(
+            HabitGlanceWidgetReceiver::class.java,
+            HabitWeekWidgetReceiver::class.java,
+            ScreenTimeWidgetReceiver::class.java,
+        )
+        val anyLeft = receivers.any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
+        if (!anyLeft) cancel(context)
     }
 
     private fun pendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(

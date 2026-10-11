@@ -106,7 +106,10 @@ class DetoxinAccessibilityService : AccessibilityService() {
                 Log.e(TAG, "Protection start bookkeeping failed", e)
             }
             while (isActive) {
-                ProtectionMonitor.heartbeat(this@DetoxinAccessibilityService, System.currentTimeMillis())
+                // При выключенном экране TikTok открыть нельзя: heartbeat не нужен, диск не трогаем.
+                if (powerManager.isInteractive) {
+                    ProtectionMonitor.heartbeat(this@DetoxinAccessibilityService, System.currentTimeMillis())
+                }
                 delay(ProtectionMonitor.HEARTBEAT_INTERVAL_MS)
             }
         }
