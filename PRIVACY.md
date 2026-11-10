@@ -61,7 +61,7 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 
 ## Внешние ссылки
 
-Кнопки «Исходный код» и «Поддержать разработчика» открывают страницу в **вашем браузере**. Само приложение при этом в сеть не обращается; к открытой странице применяется политика соответствующего сайта.
+Кнопка «Исходный код» открывает страницу в **вашем браузере**. Само приложение при этом в сеть не обращается; к открытой странице применяется политика соответствующего сайта.
 
 ## Дети
 
@@ -82,6 +82,6 @@ The accessibility service, enabled only by you, receives events from all apps bu
 
 Version 1.4.0 also stores, on the device only: the habit type (once or twice a day) with morning/evening check-ins, block events for browser and install-page blocks (without URLs), and for the Protection screen a salted PBKDF2 hash of your master PIN (the PIN itself is never stored), full-block toggles and the emergency-unlock deadline. The summary card is saved, when you ask, as a PNG to `Pictures/Detoxin`; database backups are exported and imported through the system file picker to a location you choose.
 
-Other permissions: `SYSTEM_ALERT_WINDOW` for the rest screen, `VIBRATE` for widget haptics, `POST_NOTIFICATIONS` (Android 13+, asked when Bedtime is enabled) for the bedtime reminder and the protection-off report, `RECEIVE_BOOT_COMPLETED` to restore Bedtime alarms after a reboot; `WAKE_LOCK` and `FOREGROUND_SERVICE` are added by AndroidX WorkManager for widget updates. Links to the source code and donations open in your own browser.
+Other permissions: `SYSTEM_ALERT_WINDOW` for the rest screen, `VIBRATE` for widget haptics, `POST_NOTIFICATIONS` (Android 13+, asked when Bedtime is enabled) for the bedtime reminder and the protection-off report, `RECEIVE_BOOT_COMPLETED` to restore Bedtime alarms after a reboot; `WAKE_LOCK` and `FOREGROUND_SERVICE` are added by AndroidX WorkManager for widget updates. The source code link opens in your own browser.
 
 Contact: https://github.com/vladvikhrov/detoxin/issues
