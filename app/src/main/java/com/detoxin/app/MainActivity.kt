@@ -10,6 +10,7 @@ import com.detoxin.app.bedtime.BedtimeNotifications
 import com.detoxin.app.bedtime.BedtimeScheduler
 import com.detoxin.app.ui.navigation.DetoxinApp
 import com.detoxin.app.ui.theme.DetoxinTheme
+import com.detoxin.app.util.DayRollover
 import com.detoxin.app.util.ProcessScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -31,6 +32,13 @@ class MainActivity : ComponentActivity() {
                 DetoxinApp()
             }
         }
+    }
+
+    /** Возврат в приложение после полуночи: виджеты привычек сразу переходят на новый день. */
+    override fun onStart() {
+        super.onStart()
+        val appContext = applicationContext
+        ProcessScope.io.launch { DayRollover.ensureCurrent(appContext) }
     }
 
     private fun catchUpBedtime() {

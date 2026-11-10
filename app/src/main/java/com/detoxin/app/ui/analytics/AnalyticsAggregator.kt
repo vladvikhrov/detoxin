@@ -32,7 +32,10 @@ internal object AnalyticsAggregator {
     private val youTubePackage = TrackedApp.YOUTUBE.packageName
 
     /** Типы, означающие «спасённое открытие» бесконечной ленты. */
-    private val savedOpenTypes = setOf(BlockType.SHORTS, BlockType.VK_CLIPS, BlockType.VK_FEED)
+    private val savedOpenTypes = setOf(
+        BlockType.SHORTS, BlockType.VK_CLIPS, BlockType.VK_FEED,
+        BlockType.APP_BLOCKED, BlockType.INSTALL_BLOCKED, BlockType.BROWSER_TIKTOK, BlockType.BROWSER_SHORTS,
+    )
 
     /**
      * @param currentHour текущий час: в режиме «День» более поздние часы ещё не наступили,

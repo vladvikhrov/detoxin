@@ -14,6 +14,10 @@ import androidx.room.PrimaryKey
  * `defaultValue` совпадает с DDL миграций 1→2 и 2→3, иначе валидация схемы Room не пройдёт.
  *
  * [autoSource] — источник автоматических отметок ([HabitAutoSource]); `null` — только ручные.
+ *
+ * [timesPerDay] — 1 (обычная привычка) или 2 (утро и вечер). У двухразовой привычки день
+ * засчитан, только когда отмечены оба раза; вечернюю отметку за сегодня можно поставить
+ * начиная с [EVENING_START_HOUR] часов.
  */
 @Entity(tableName = "habits")
 data class Habit(
@@ -29,9 +33,23 @@ data class Habit(
     val cycleResetEpochDay: Long = 0L,
     @ColumnInfo(defaultValue = "NULL")
     val autoSource: String? = null,
+    @ColumnInfo(defaultValue = "1")
+    val timesPerDay: Int = 1,
 ) {
+    val isTwiceDaily: Boolean get() = timesPerDay >= 2
+
     companion object {
         const val DEFAULT_CYCLE_LENGTH = 30
+        const val EVENING_START_HOUR = 15
+
+        /** Биты [HabitLog.slotsDone]. */
+        const val SLOT_MORNING = 1
+        const val SLOT_EVENING = 2
+        const val SLOTS_ALL = SLOT_MORNING or SLOT_EVENING
+
+        /** Вечернюю отметку можно ставить за прошлые дни всегда, за сегодня — с [EVENING_START_HOUR]:00. */
+        fun isEveningOpen(epochDay: Long, now: java.time.LocalDateTime): Boolean =
+            epochDay < now.toLocalDate().toEpochDay() || now.hour >= EVENING_START_HOUR
     }
 }
 

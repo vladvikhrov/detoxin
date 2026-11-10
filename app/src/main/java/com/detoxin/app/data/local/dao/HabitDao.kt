@@ -166,6 +166,61 @@ abstract class HabitDao {
         return getCompletion(habitId, dateEpochDay) == true
     }
 
+    @Query("SELECT slotsDone FROM habit_logs WHERE habitId = :habitId AND dateEpochDay = :dateEpochDay")
+    protected abstract suspend fun getSlots(habitId: Long, dateEpochDay: Long): Int?
+
+    @Query(
+        """
+        UPDATE habit_logs
+        SET slotsDone = :slots, isCompleted = :isCompleted
+        WHERE habitId = :habitId AND dateEpochDay = :dateEpochDay
+        """
+    )
+    protected abstract suspend fun updateSlots(habitId: Long, dateEpochDay: Long, slots: Int, isCompleted: Boolean): Int
+
+    /**
+     * Отметка с учётом типа привычки. Обычная привычка ведёт себя как [toggleHabit].
+     * Двухразовая отмечается по шагам: пусто → утро → утро и вечер → пусто. Пока вечер
+     * закрыт ([eveningOpen] = `false`, сегодня до [Habit.EVENING_START_HOUR]:00), нажатие
+     * переключает только утреннюю отметку, а попытка поставить вечер возвращает
+     * [HabitToggleResult.EVENING_LOCKED] без изменений.
+     */
+    @Transaction
+    open suspend fun toggleHabitStep(habitId: Long, dateEpochDay: Long, eveningOpen: Boolean): HabitToggleResult {
+        val habit = getHabitById(habitId) ?: return HabitToggleResult.UNCHECKED
+        if (!habit.isTwiceDaily) {
+            return if (toggleHabit(habitId, dateEpochDay)) HabitToggleResult.COMPLETED else HabitToggleResult.UNCHECKED
+        }
+        val current = getSlots(habitId, dateEpochDay) ?: 0
+        val next = when (current) {
+            0 -> Habit.SLOT_MORNING
+            Habit.SLOT_MORNING -> if (eveningOpen) Habit.SLOTS_ALL else return HabitToggleResult.EVENING_LOCKED
+            Habit.SLOT_EVENING -> Habit.SLOTS_ALL
+            else -> 0
+        }
+        val isCompleted = next == Habit.SLOTS_ALL
+        val rowId = insertLogIfAbsent(
+            HabitLog(habitId = habitId, dateEpochDay = dateEpochDay, isCompleted = isCompleted, slotsDone = next)
+        )
+        if (rowId == -1L) updateSlots(habitId, dateEpochDay, next, isCompleted)
+        return when {
+            isCompleted -> HabitToggleResult.COMPLETED
+            next == 0 -> HabitToggleResult.UNCHECKED
+            else -> HabitToggleResult.PARTIAL
+        }
+    }
+
+    /** Возврат снятой отметки: обычной привычке — `isCompleted`, двухразовой — обе отметки. */
+    @Transaction
+    open suspend fun restoreCompletion(habitId: Long, dateEpochDay: Long) {
+        val twice = getHabitById(habitId)?.isTwiceDaily == true
+        val slots = if (twice) Habit.SLOTS_ALL else 0
+        val rowId = insertLogIfAbsent(
+            HabitLog(habitId = habitId, dateEpochDay = dateEpochDay, isCompleted = true, slotsDone = slots)
+        )
+        if (rowId == -1L) updateSlots(habitId, dateEpochDay, slots, true)
+    }
+
     /**
      * Идемпотентная установка отметки (для «Отменить»): повторное нажатие не превращается
      * в повторный toggle, даже если пользователь успел коснуться дня ещё раз.
@@ -219,3 +274,6 @@ abstract class HabitDao {
             grouped.map { (habit, logs) -> HabitWithLogs(habit = habit, logs = logs) }
         }
 }
+
+/** Итог нажатия на отметку привычки. */
+enum class HabitToggleResult { COMPLETED, PARTIAL, UNCHECKED, EVENING_LOCKED }

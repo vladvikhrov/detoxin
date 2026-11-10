@@ -53,4 +53,13 @@ abstract class ProtectionGapDao {
         """
     )
     abstract fun observeOverlapping(fromWall: Long, toWall: Long): Flow<List<ProtectionGap>>
+
+    /** Разрывы с причиной [reason], которые ещё идут на момент [nowWall], заканчиваются в [nowWall]. */
+    @Query(
+        """
+        UPDATE protection_gaps SET endedAtWall = :nowWall
+        WHERE reason = :reason AND startedAtWall <= :nowWall AND endedAtWall > :nowWall
+        """
+    )
+    abstract suspend fun truncateRunning(reason: String, nowWall: Long): Int
 }

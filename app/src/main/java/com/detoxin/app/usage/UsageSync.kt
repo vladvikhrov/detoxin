@@ -6,6 +6,7 @@ import com.detoxin.app.core.TrackedApp
 import com.detoxin.app.data.local.DatabaseProvider
 import com.detoxin.app.data.local.entity.AppUsageLog
 import com.detoxin.app.ui.widget.ScreenTimeWidget
+import com.detoxin.app.util.DayRollover
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -44,6 +45,8 @@ object UsageSync {
             if (!UsageStatsReader.hasAccess(appContext)) return@withLock false
             try {
                 syncLocked(appContext)
+                // Попутная проверка смены дня: виджеты привычек не должны показывать вчерашнюю отметку.
+                DayRollover.ensureCurrent(appContext)
                 ScreenTimeWidget.refreshAll(appContext)
                 true
             } catch (e: CancellationException) {

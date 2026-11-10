@@ -25,6 +25,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.ui.state.ToggleableState
+import com.detoxin.app.data.local.entity.Habit
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,6 +69,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.detoxin.app.data.local.entity.HabitAutoSource
 import com.detoxin.app.ui.about.AboutSheet
 import com.detoxin.app.ui.habits.components.DayMarkStrip
+import com.detoxin.app.ui.habits.components.HabitProgressBar
+import com.detoxin.app.ui.habits.components.HabitProgressBarDefaults
 import com.detoxin.app.ui.habits.components.WeekProgressRing
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -91,6 +96,15 @@ fun HabitsScreen(
 
     // Снятая отметка → «Отменить». Snackbar показывается там, где пользователь сейчас:
     // в открытой панели привычки или на основном экране.
+    LaunchedEffect(viewModel) {
+        viewModel.infoEvents.collect { message ->
+            val host = if (detailOpen) sheetSnackbar else screenSnackbar
+            launch {
+                host.currentSnackbarData?.dismiss()
+                host.showSnackbar(message = message, duration = SnackbarDuration.Short)
+            }
+        }
+    }
     LaunchedEffect(viewModel) {
         viewModel.undoEvents.collect { day ->
             val host = if (detailOpen) sheetSnackbar else screenSnackbar
@@ -172,8 +186,8 @@ fun HabitsScreen(
     if (showAddDialog) {
         AddHabitDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { title, target, color, autoSource ->
-                viewModel.addHabit(title, target, color, autoSource)
+            onConfirm = { title, target, color, autoSource, timesPerDay ->
+                viewModel.addHabit(title, target, color, autoSource, timesPerDay)
                 showAddDialog = false
             },
         )
@@ -198,6 +212,12 @@ private fun HabitsContent(
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item(key = "today") {
+            TodayProgressCard(
+                completed = content.habits.count { it.completedToday },
+                total = content.habits.size,
+            )
+        }
         item(key = "overview") {
             PaceOverviewCard(content.overview)
         }
@@ -213,6 +233,37 @@ private fun HabitsContent(
                 onToggle = { onToggle(habit.id) },
                 onToggleDay = { epochDay -> onToggleDay(habit.id, epochDay) },
                 onClick = { onOpen(habit.id) },
+            )
+        }
+    }
+}
+
+/** «Сегодня: 3 из 5» с полосой заполнения; без привычек карточка не показывается. */
+@Composable
+private fun TodayProgressCard(completed: Int, total: Int) {
+    if (total <= 0) return
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (completed >= total) "Сегодня всё выполнено" else "Сегодня: $completed из $total",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "${HabitProgressBarDefaults.percent(completed, total)}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            HabitProgressBar(
+                completed = completed,
+                total = total,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -285,11 +336,23 @@ private fun HabitCard(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Checkbox(
-                    checked = habit.completedToday,
-                    onCheckedChange = { onToggle() },
-                    colors = CheckboxDefaults.colors(checkedColor = color, uncheckedColor = color),
-                )
+                if (habit.timesPerDay >= 2) {
+                    TriStateCheckbox(
+                        state = when {
+                            habit.completedToday -> ToggleableState.On
+                            habit.todaySlots != 0 -> ToggleableState.Indeterminate
+                            else -> ToggleableState.Off
+                        },
+                        onClick = onToggle,
+                        colors = CheckboxDefaults.colors(checkedColor = color, uncheckedColor = color),
+                    )
+                } else {
+                    Checkbox(
+                        checked = habit.completedToday,
+                        onCheckedChange = { onToggle() },
+                        colors = CheckboxDefaults.colors(checkedColor = color, uncheckedColor = color),
+                    )
+                }
                 Column(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
                     Text(
                         text = habit.title,
@@ -303,6 +366,13 @@ private fun HabitCard(
                         "Стрик не начат"
                     }
                     val autoText = if (habit.isAuto) " • авто" else ""
+                    if (habit.timesPerDay >= 2) {
+                        Text(
+                            text = twiceDailyStatus(habit.todaySlots),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = color,
+                        )
+                    }
                     Text(
                         text = "$streakText • цикл ${habit.cycleProgress}/${habit.cycleLength}$autoText",
                         style = MaterialTheme.typography.bodySmall,
@@ -352,10 +422,11 @@ private fun EmptyHabits() {
 @Composable
 private fun AddHabitDialog(
     onDismiss: () -> Unit,
-    onConfirm: (title: String, target: Int, colorHex: Long, autoSource: HabitAutoSource?) -> Unit,
+    onConfirm: (title: String, target: Int, colorHex: Long, autoSource: HabitAutoSource?, timesPerDay: Int) -> Unit,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var autoBedtime by rememberSaveable { mutableStateOf(false) }
+    var twiceDaily by rememberSaveable { mutableStateOf(false) }
     var target by rememberSaveable { mutableFloatStateOf(5f) }
     var colorHex by rememberSaveable { mutableLongStateOf(HabitPalette.first()) }
     val trimmed = title.trim()
@@ -385,10 +456,18 @@ private fun AddHabitDialog(
                 )
                 Text("Цвет", style = MaterialTheme.typography.bodyMedium)
                 ColorPicker(selected = colorHex, onSelected = { colorHex = it })
+                TwiceDailyOption(
+                    checked = twiceDaily,
+                    onCheckedChange = { checked ->
+                        twiceDaily = checked
+                        if (checked) autoBedtime = false
+                    },
+                )
                 AutoBedtimeOption(
                     checked = autoBedtime,
                     onCheckedChange = { checked ->
                         autoBedtime = checked
+                        if (checked) twiceDaily = false
                         if (checked && title.isBlank()) title = BEDTIME_HABIT_TITLE
                     },
                 )
@@ -397,7 +476,13 @@ private fun AddHabitDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(trimmed, target.roundToInt(), colorHex, if (autoBedtime) HabitAutoSource.BEDTIME else null)
+                    onConfirm(
+                        trimmed,
+                        target.roundToInt(),
+                        colorHex,
+                        if (autoBedtime) HabitAutoSource.BEDTIME else null,
+                        if (twiceDaily) 2 else 1,
+                    )
                 },
                 enabled = trimmed.isNotEmpty(),
             ) {
@@ -433,6 +518,33 @@ private fun ColorPicker(selected: Long, onSelected: (Long) -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun TwiceDailyOption(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Два раза в день", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "Утром и вечером. День засчитывается, когда отмечены оба раза; " +
+                    "вечернюю отметку можно поставить с ${Habit.EVENING_START_HOUR}:00.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/** «Утро ✓ · вечер с 15:00» — статус двухразовой привычки за сегодня. */
+private fun twiceDailyStatus(slots: Int): String {
+    val morning = if (slots and Habit.SLOT_MORNING != 0) "Утро ✓" else "Утро —"
+    val evening = when {
+        slots and Habit.SLOT_EVENING != 0 -> "вечер ✓"
+        java.time.LocalTime.now().hour < Habit.EVENING_START_HOUR -> "вечер с ${Habit.EVENING_START_HOUR}:00"
+        else -> "вечер —"
+    }
+    return "$morning · $evening"
 }
 
 @Composable

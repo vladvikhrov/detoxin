@@ -11,7 +11,10 @@ import com.detoxin.app.overlay.OverlayStyle
 import com.detoxin.app.usage.BedtimePolicy
 import com.detoxin.app.usage.BedtimeSettings
 import com.detoxin.app.usage.BudgetUsage
+import com.detoxin.app.guard.BootClock
 import com.detoxin.app.usage.LimitBlock
+import com.detoxin.app.usage.LimitLatchPolicy
+import com.detoxin.app.usage.LimitLatchStore
 import com.detoxin.app.usage.UsageBudget
 import com.detoxin.app.usage.UsageSnapshot
 import com.detoxin.app.usage.UsageStatsReader
@@ -42,6 +45,9 @@ import java.time.format.DateTimeFormatter
  * Лимиты: «Отбой» (до подъёма), дневной (до полуночи, а если на неё приходится окно сна — до
  * подъёма) и часовой (до начала следующего часа). Экран блокировки показан, пока заблокированное
  * приложение на экране, и снимается при уходе из него.
+ *
+ * Античит: сработавший лимит «защёлкивается» по монотонным часам ([LimitLatchPolicy]), поэтому
+ * перевод системного времени не возвращает свежий лимит.
  */
 class AppUsageTracker(
     private val context: Context,
@@ -49,8 +55,12 @@ class AppUsageTracker(
     private val tickerScope: CoroutineScope,
     private val foregroundProbe: () -> String?,
     private val bedtimeProvider: () -> BedtimeSettings,
+    private val pausedProvider: () -> Boolean,
     private val onGoHome: () -> Unit,
 ) {
+
+    private val latchStore = LimitLatchStore(context)
+    private val bootCount: Int = BootClock.bootCount(context)
 
     /** Отдельный scope синхронизации: финальная запись при остановке службы не отменяется. */
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -100,7 +110,8 @@ class AppUsageTracker(
         lastForeground = foreground
         if (leftTrackedApp) requestSync(nowElapsed)
 
-        if (foreground == null || !usageAccess(nowElapsed)) {
+        // Экстренная разблокировка ставит на паузу все лимиты, включая «защёлкнутые».
+        if (foreground == null || pausedProvider() || !usageAccess(nowElapsed)) {
             overlayManager.hide()
             return
         }
@@ -108,10 +119,14 @@ class AppUsageTracker(
         requestSnapshotIfStale(nowElapsed)
         if (nowElapsed - lastSyncElapsed >= SYNC_INTERVAL_MS) requestSync(nowElapsed)
 
-        val current = snapshot ?: return
-        val bedtime = bedtimeProvider()
-        val usage = usedNow(current, foreground, bedtime, nowWall, nowElapsed)
-        val block = UsageBudget.decide(foreground, usage, bedtime, nowWall, zone)
+        // До первого снимка статистики решение по часам неизвестно, но защёлка уже действует.
+        val byClock = snapshot?.let { current ->
+            val bedtime = bedtimeProvider()
+            UsageBudget.decide(foreground, usedNow(current, foreground, bedtime, nowWall, nowElapsed), bedtime, nowWall, zone)
+        }
+        val resolution = LimitLatchPolicy.resolve(latchStore.get(foreground), byClock, nowWall, nowElapsed, bootCount)
+        latchStore.put(foreground, resolution.entry)
+        val block = resolution.block
         if (block == null || block.untilWall <= nowWall) {
             if (overlayManager.isShowing) overlayManager.hide()
             return

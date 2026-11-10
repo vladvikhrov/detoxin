@@ -22,7 +22,7 @@ import com.detoxin.app.data.local.entity.ProtectionGap
         HabitLog::class,
         ProtectionGap::class,
     ],
-    version = 3,
+    version = DetoxinDatabase.VERSION,
     exportSchema = false,
 )
 @TypeConverters(DetoxinTypeConverters::class)
@@ -31,4 +31,8 @@ abstract class DetoxinDatabase : RoomDatabase() {
     abstract fun blockedAttemptDao(): BlockedAttemptDao
     abstract fun habitDao(): HabitDao
     abstract fun protectionGapDao(): ProtectionGapDao
+
+    companion object {
+        const val VERSION = 5
+    }
 }

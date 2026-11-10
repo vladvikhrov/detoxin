@@ -7,28 +7,28 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.detoxin.app.bedtime.BedtimeHabitEvaluator
 import com.detoxin.app.data.local.DatabaseProvider
+import com.detoxin.app.data.local.dao.HabitToggleResult
 import com.detoxin.app.data.local.entity.Habit
 import com.detoxin.app.data.local.entity.HabitAutoSource
 import com.detoxin.app.ui.widget.HabitGlanceWidget
+import com.detoxin.app.util.DayRollover
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.Locale
 
@@ -52,20 +52,21 @@ class HabitsViewModel(application: Application) : AndroidViewModel(application) 
     private val habitDao = DatabaseProvider.getDatabase(application).habitDao()
     private val zone: ZoneId get() = ZoneId.systemDefault()
 
-    /** Текущая дата; эмитит заново сразу после локальной полуночи. */
-    private val currentDay: Flow<LocalDate> = flow {
-        while (true) {
-            val today = LocalDate.now(zone)
-            emit(today)
-            val nextMidnight = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            delay((nextMidnight - System.currentTimeMillis()).coerceAtLeast(0L) + MIDNIGHT_SLACK_MS)
-        }
-    }.distinctUntilChanged()
+    /**
+     * Текущая локальная дата; обновляется в полночь, при смене времени и часового пояса без
+     * перезапуска приложения ([DayRollover.dayFlow]).
+     */
+    private val currentDay: Flow<LocalDate> = DayRollover.dayFlow(application)
 
     private val undoChannel = Channel<UncheckedDay>(Channel.BUFFERED)
 
     /** Снятые отметки, которые экран предлагает вернуть. */
     val undoEvents: Flow<UncheckedDay> = undoChannel.receiveAsFlow()
+
+    private val infoChannel = Channel<String>(Channel.BUFFERED)
+
+    /** Короткие подсказки для Snackbar (например, «вечер с 15:00»). */
+    val infoEvents: Flow<String> = infoChannel.receiveAsFlow()
 
     val uiState: StateFlow<HabitsUiState> = currentDay
         .flatMapLatest { today ->
@@ -141,20 +142,31 @@ class HabitsViewModel(application: Application) : AndroidViewModel(application) 
         val today = LocalDate.now(zone).toEpochDay()
         if (epochDay > today || epochDay < today - HabitStatsCalculator.BACKFILL_WINDOW_DAYS) return
         write {
-            val isCompleted = habitDao.toggleHabit(habitId, epochDay)
-            if (!isCompleted) {
-                val title = habitDao.getHabitById(habitId)?.title.orEmpty()
-                undoChannel.send(UncheckedDay(habitId = habitId, habitTitle = title, epochDay = epochDay))
+            val eveningOpen = Habit.isEveningOpen(epochDay, LocalDateTime.now(zone))
+            when (habitDao.toggleHabitStep(habitId, epochDay, eveningOpen)) {
+                HabitToggleResult.UNCHECKED -> {
+                    val title = habitDao.getHabitById(habitId)?.title.orEmpty()
+                    undoChannel.send(UncheckedDay(habitId = habitId, habitTitle = title, epochDay = epochDay))
+                }
+                HabitToggleResult.EVENING_LOCKED ->
+                    infoChannel.send("Утро отмечено. Вечернюю отметку можно поставить с ${Habit.EVENING_START_HOUR}:00")
+                HabitToggleResult.COMPLETED, HabitToggleResult.PARTIAL -> Unit
             }
         }
     }
 
     /** «Отменить» после снятия отметки: идемпотентно возвращает отметку. */
     fun undoUncheck(day: UncheckedDay) = write {
-        habitDao.setCompletion(day.habitId, day.epochDay, isCompleted = true)
+        habitDao.restoreCompletion(day.habitId, day.epochDay)
     }
 
-    fun addHabit(title: String, targetDaysPerWeek: Int, colorHex: Long, autoSource: HabitAutoSource?) = write {
+    fun addHabit(
+        title: String,
+        targetDaysPerWeek: Int,
+        colorHex: Long,
+        autoSource: HabitAutoSource?,
+        timesPerDay: Int,
+    ) = write {
         habitDao.insertHabit(
             Habit(
                 title = title.trim(),
@@ -162,6 +174,7 @@ class HabitsViewModel(application: Application) : AndroidViewModel(application) 
                 colorHex = colorHex,
                 createdAt = System.currentTimeMillis(),
                 autoSource = autoSource?.key,
+                timesPerDay = if (autoSource == null) timesPerDay.coerceIn(1, 2) else 1,
             )
         )
         // Если прошлая ночь уже прошла «чисто», автопривычка сразу получает сегодняшнюю отметку.
@@ -210,6 +223,5 @@ class HabitsViewModel(application: Application) : AndroidViewModel(application) 
         const val TAG = "HabitsViewModel"
         const val HISTORY_WINDOW_DAYS = 400L
         const val STOP_TIMEOUT_MS = 5_000L
-        const val MIDNIGHT_SLACK_MS = 1_000L
     }
 }

@@ -1,5 +1,6 @@
 package com.detoxin.app.ui.bedtime
 
+import com.detoxin.app.ui.guard.GuardDialog
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -71,6 +72,19 @@ fun BedtimeSettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    // Ослабление «Отбоя» при заданном мастер-PIN сначала проходит через барьер.
+    var guarded by remember { mutableStateOf<BedtimeSettings?>(null) }
+    guarded?.let { requested ->
+        GuardDialog(
+            title = "Ослабление «Отбоя»",
+            requirePhrase = false,
+            onDismiss = { guarded = null },
+            onPassed = {
+                guarded = null
+                viewModel.save(requested)
+            },
+        )
+    }
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbar.showSnackbar(it) }
     }
@@ -96,7 +110,9 @@ fun BedtimeSettingsScreen(
         } else {
             BedtimeForm(
                 state = current,
-                onSave = viewModel::save,
+                onSave = { requested ->
+                    if (BedtimePolicy.isRelaxation(current.settings, requested)) guarded = requested else viewModel.save(requested)
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),

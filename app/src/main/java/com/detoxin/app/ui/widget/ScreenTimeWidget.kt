@@ -1,5 +1,9 @@
 package com.detoxin.app.ui.widget
 
+import com.detoxin.app.util.DayRollover
+import com.detoxin.app.util.ProcessScope
+import kotlinx.coroutines.launch
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Composable
@@ -41,7 +45,6 @@ import com.detoxin.app.bedtime.BedtimeRepository
 import com.detoxin.app.core.TrackedApp
 import com.detoxin.app.usage.BedtimePolicy
 import com.detoxin.app.usage.UsageStatsReader
-import com.detoxin.app.util.formatDurationShort
 import com.detoxin.app.util.formatMinuteOfDay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +105,7 @@ class ScreenTimeWidget : GlanceAppWidget() {
 
     companion object {
         private const val TAG = "ScreenTimeWidget"
+        private const val MAX_ROWS = 2
         private val CLOCK: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
         /** Перечитать статистику во всех экземплярах. Безопасно вызывать часто: без экземпляров — no-op. */
@@ -146,13 +150,27 @@ class ScreenTimeWidget : GlanceAppWidget() {
                 window != null -> "Отбой до " + Instant.ofEpochMilli(window.endWall).atZone(zone).format(CLOCK)
                 else -> "Отбой в " + formatMinuteOfDay(bedtime.startMinute)
             }
-            return ScreenTimeWidgetState.Ready(apps, bedtimeLine)
+            // В виджете 2×1 помещаются две строки: показываем приложения, ближе всего подошедшие к лимиту.
+            val closestToLimit = apps
+                .sortedByDescending { if (it.limitMs > 0L) it.usedMs.toDouble() / it.limitMs else 0.0 }
+                .take(MAX_ROWS)
+            return ScreenTimeWidgetState.Ready(closestToLimit, bedtimeLine)
         }
     }
 }
 
 class ScreenTimeWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = ScreenTimeWidget()
+
+    /**
+     * Периодическое обновление (раз в 30 минут, работает и при выключенной службе) заодно
+     * проверяет смену дня для виджетов привычек.
+     */
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
+        val appContext = context.applicationContext
+        ProcessScope.io.launch { DayRollover.ensureCurrent(appContext) }
+    }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
@@ -206,8 +224,9 @@ private fun UsageRow(app: AppUsageRow) {
             style = TextStyle(color = colors.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "${formatDurationShort(app.usedMs)} / ${formatDurationShort(app.limitMs)}",
+            text = "${app.usedMs / 60_000L} / ${app.limitMs / 60_000L} мин",
             maxLines = 1,
+            modifier = GlanceModifier.padding(start = 6.dp),
             style = TextStyle(color = if (over) colors.error else colors.onSurfaceVariant, fontSize = 11.sp),
         )
     }

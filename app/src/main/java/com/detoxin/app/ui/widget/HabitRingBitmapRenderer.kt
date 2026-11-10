@@ -8,18 +8,14 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Процедурный циферблат цикла привычки для Glance-виджета (Glance не поддерживает
  * Compose Canvas, поэтому рисование идёт через `android.graphics.Canvas` в [Bitmap]).
  *
  * Геометрия (при размере [SIZE_PX] = 240 px, ARGB_8888 ≈ 225 КБ):
- *  - окружность делится на [SEGMENTS] секторов по 12°; видимая дуга каждого — [VISIBLE_SWEEP_DEG],
- *    остальное — зазор. Круглые концы (`Cap.ROUND`) удлиняют дугу на `strokeWidth / 2` с каждой
- *    стороны, поэтому их угловой размер вычитается из sweep — иначе зазоры бы «слиплись»;
- *  - первые `K` сегментов — цвет привычки со свечением (`setShadowLayer`), текущий сегмент ярче;
- *    остальные — приглушённый [TRACK_COLOR];
+ *  - кольцо — сплошная полоса: приглушённый [TRACK_COLOR] по всему кругу и дуга прогресса
+ *    цветом привычки со свечением (`setShadowLayer`), от «12 часов» по часовой стрелке;
  *  - центр: залитый диск с галочкой, если сегодня выполнено, иначе контурная окружность —
  *    приглашение к касанию. Число дня цикла — крупно в центре, «/30» под ним.
  *
@@ -29,10 +25,6 @@ import kotlin.math.min
 internal object HabitRingBitmapRenderer {
 
     const val SIZE_PX = 240
-    const val SEGMENTS = 30
-
-    private const val SEGMENT_DEG = 360f / SEGMENTS
-    private const val VISIBLE_SWEEP_DEG = 8.5f
     private const val STROKE_PX = 12f
     private const val GLOW_RADIUS_PX = 6f
     private const val EDGE_PADDING_PX = GLOW_RADIUS_PX + 2f
@@ -43,7 +35,7 @@ internal object HabitRingBitmapRenderer {
 
     /**
      * @param progress выполненные дни цикла (ограничиваются [cycleLength]).
-     * @param cycleLength длина цикла; кольцо всегда из 30 сегментов, прогресс масштабируется.
+     * @param cycleLength длина цикла; доля заполнения кольца — `progress / cycleLength`.
      */
     fun render(progress: Int, cycleLength: Int, completedToday: Boolean, colorArgb: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(SIZE_PX, SIZE_PX, Bitmap.Config.ARGB_8888)
@@ -51,35 +43,22 @@ internal object HabitRingBitmapRenderer {
         val center = SIZE_PX / 2f
         val length = max(cycleLength, 1)
         val clamped = progress.coerceIn(0, length)
-        val filledSegments = if (clamped == 0) 0 else max(1, (clamped * SEGMENTS + length - 1) / length)
-
-        drawSegments(canvas, center, filledSegments, colorArgb)
+        drawSegments(canvas, center, clamped, length, colorArgb)
         drawCenter(canvas, center, clamped, length, completedToday, colorArgb)
         return bitmap
     }
 
-    private fun drawSegments(canvas: Canvas, center: Float, filled: Int, color: Int) {
+    /** Сплошная полоса заполнения: серый трек по всему кругу и дуга прогресса сверху по часовой стрелке. */
+    private fun drawSegments(canvas: Canvas, center: Float, progress: Int, length: Int, color: Int) {
         val radius = center - EDGE_PADDING_PX - STROKE_PX / 2f
         val oval = RectF(center - radius, center - radius, center + radius, center + radius)
-        val capDeg = Math.toDegrees((STROKE_PX / 2f / radius).toDouble()).toFloat()
-        val drawnSweep = max(VISIBLE_SWEEP_DEG - 2f * capDeg, 0.5f)
-        val gapHalf = (SEGMENT_DEG - drawnSweep) / 2f
-
-        val track = strokePaint(TRACK_COLOR)
+        canvas.drawCircle(center, center, radius, strokePaint(TRACK_COLOR))
+        if (progress <= 0) return
         val active = strokePaint(color).apply { setShadowLayer(GLOW_RADIUS_PX, 0f, 0f, withAlpha(color, 0x99)) }
-        val current = strokePaint(lighten(color, 0.35f)).apply {
-            setShadowLayer(GLOW_RADIUS_PX * 1.4f, 0f, 0f, withAlpha(color, 0xCC))
-        }
-
-        for (index in 0 until SEGMENTS) {
-            // Первый сегмент начинается сверху (-90°) и идёт по часовой стрелке.
-            val start = -90f + index * SEGMENT_DEG + gapHalf
-            val paint = when {
-                index >= filled -> track
-                index == filled - 1 -> current
-                else -> active
-            }
-            canvas.drawArc(oval, start, drawnSweep, false, paint)
+        if (progress >= length) {
+            canvas.drawCircle(center, center, radius, active.apply { strokeCap = Paint.Cap.BUTT })
+        } else {
+            canvas.drawArc(oval, -90f, 360f * progress / length, false, active)
         }
     }
 
@@ -145,10 +124,4 @@ internal object HabitRingBitmapRenderer {
     }
 
     private fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
-
-    /** Смешивание с белым: яркий оттенок для текущего сегмента. */
-    private fun lighten(color: Int, amount: Float): Int {
-        fun channel(value: Int) = min(255, (value + (255 - value) * amount).toInt())
-        return Color.argb(Color.alpha(color), channel(Color.red(color)), channel(Color.green(color)), channel(Color.blue(color)))
-    }
 }

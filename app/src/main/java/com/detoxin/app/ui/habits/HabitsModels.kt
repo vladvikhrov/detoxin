@@ -25,6 +25,10 @@ data class HabitItemUi(
     val lastSevenDays: List<DayMark>,
     /** Привычка отмечается автоматически («Лёг вовремя»). */
     val isAuto: Boolean,
+    /** 1 — обычная, 2 — утром и вечером. */
+    val timesPerDay: Int = 1,
+    /** Маска отметок за сегодня ([com.detoxin.app.data.local.entity.Habit.SLOT_MORNING] и т. д.). */
+    val todaySlots: Int = 0,
 )
 
 /** День в ряду быстрой отметки. [weekdayLabel] — «Пн», «Вт»… */
@@ -34,6 +38,8 @@ data class DayMark(
     val weekdayLabel: String,
     val isCompleted: Boolean,
     val isToday: Boolean,
+    /** Двухразовая привычка отмечена только один раз. */
+    val isPartial: Boolean = false,
 )
 
 /** Снятая отметка, которую можно вернуть кнопкой «Отменить» в Snackbar. */

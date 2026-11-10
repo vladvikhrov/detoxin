@@ -52,6 +52,7 @@ import com.detoxin.app.R
 import com.detoxin.app.data.local.DatabaseProvider
 import com.detoxin.app.data.local.dao.HabitDao
 import com.detoxin.app.data.local.entity.Habit
+import com.detoxin.app.util.DayRollover
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -158,6 +159,7 @@ class HabitGlanceWidget : GlanceAppWidget() {
             if (singleIds.isNotEmpty() || weekIds.isNotEmpty() || screenTimeIds.isNotEmpty()) {
                 MidnightRefreshScheduler.schedule(context)
             }
+            DayRollover.markRendered(context, today)
         }
 
         private suspend fun loadSnapshot(dao: HabitDao, habitId: Long?, day: Long): HabitWidgetState {

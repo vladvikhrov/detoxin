@@ -50,6 +50,11 @@ internal object HabitStatsCalculator {
 
         val items = habits.map { item ->
             val completed = completedDays(item.logs)
+            val partial = if (item.habit.isTwiceDaily) {
+                item.logs.asSequence().filter { !it.isCompleted && it.slotsDone != 0 }.map { it.dateEpochDay }.toHashSet()
+            } else {
+                emptySet()
+            }
             HabitItemUi(
                 id = item.habit.id,
                 title = item.habit.title,
@@ -67,9 +72,14 @@ internal object HabitStatsCalculator {
                         weekdayLabel = date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale),
                         isCompleted = date.toEpochDay() in completed,
                         isToday = offset == 0,
+                        isPartial = date.toEpochDay() in partial,
                     )
                 },
                 isAuto = HabitAutoSource.fromKey(item.habit.autoSource) != null,
+                timesPerDay = item.habit.timesPerDay,
+                todaySlots = item.logs.firstOrNull { it.dateEpochDay == todayDay }?.let {
+                    if (it.isCompleted && item.habit.isTwiceDaily) Habit.SLOTS_ALL else it.slotsDone
+                } ?: 0,
             )
         }
 
@@ -260,7 +270,7 @@ internal object HabitStatsCalculator {
     }
 
     /** Стрик жив, если сегодня ещё не отмечено, но вчера выполнено. */
-    private fun currentStreak(completed: Set<Long>, todayDay: Long): Int {
+    internal fun currentStreak(completed: Set<Long>, todayDay: Long): Int {
         var day = if (todayDay in completed) todayDay else todayDay - 1
         var streak = 0
         while (day in completed) {

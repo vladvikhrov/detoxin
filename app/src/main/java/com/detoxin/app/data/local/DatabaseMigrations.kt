@@ -38,5 +38,20 @@ internal object DatabaseMigrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    /** 3 → 4: причина разрыва защиты (выключенная служба или экстренная разблокировка). */
+    val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE protection_gaps ADD COLUMN reason TEXT NOT NULL DEFAULT 'SERVICE_OFF'")
+        }
+    }
+
+    /** 4 → 5: привычки «два раза в день» (утро и вечер). */
+    val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE habits ADD COLUMN timesPerDay INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE habit_logs ADD COLUMN slotsDone INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

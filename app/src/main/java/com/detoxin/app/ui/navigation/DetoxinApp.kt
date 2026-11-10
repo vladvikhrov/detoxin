@@ -25,6 +25,9 @@ import com.detoxin.app.ui.bedtime.BedtimeSettingsScreen
 import com.detoxin.app.ui.habits.HabitsScreen
 import com.detoxin.app.ui.permissions.DisclosurePreferences
 import com.detoxin.app.ui.permissions.PermissionsScreen
+import com.detoxin.app.ui.protection.ProtectionScreen
+import com.detoxin.app.ui.relapse.RelapseScreen
+import com.detoxin.app.ui.share.ShareCardScreen
 
 /** Вкладки нижней навигации. */
 enum class AppTab(val title: String, @DrawableRes val icon: Int) {
@@ -51,6 +54,9 @@ fun DetoxinApp() {
     var disclosureAccepted by rememberSaveable { mutableStateOf(DisclosurePreferences.isAccepted(context)) }
     var showPermissions by rememberSaveable { mutableStateOf(false) }
     var showBedtime by rememberSaveable { mutableStateOf(false) }
+    var showProtection by rememberSaveable { mutableStateOf(false) }
+    var showRelapse by rememberSaveable { mutableStateOf(false) }
+    var showShare by rememberSaveable { mutableStateOf(false) }
 
     // Первый запуск: объяснение разрешений показывается до основного интерфейса.
     if (!disclosureAccepted) {
@@ -71,6 +77,22 @@ fun DetoxinApp() {
     if (showBedtime) {
         BackHandler { showBedtime = false }
         BedtimeSettingsScreen(onBack = { showBedtime = false })
+        return
+    }
+
+    if (showProtection) {
+        BackHandler { showProtection = false }
+        ProtectionScreen(onBack = { showProtection = false })
+        return
+    }
+    if (showRelapse) {
+        BackHandler { showRelapse = false }
+        RelapseScreen(onBack = { showRelapse = false })
+        return
+    }
+    if (showShare) {
+        BackHandler { showShare = false }
+        ShareCardScreen(onBack = { showShare = false })
         return
     }
 
@@ -98,6 +120,9 @@ fun DetoxinApp() {
                 AppTab.USAGE -> AnalyticsScreen(
                     onOpenPermissions = { showPermissions = true },
                     onOpenBedtime = { showBedtime = true },
+                    onOpenProtection = { showProtection = true },
+                    onOpenRelapse = { showRelapse = true },
+                    onOpenShare = { showShare = true },
                 )
                 AppTab.HABITS -> HabitsScreen(onOpenPermissions = { showPermissions = true })
             }

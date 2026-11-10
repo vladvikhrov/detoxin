@@ -15,8 +15,8 @@ android {
         applicationId = "com.detoxin.app"
         minSdk = 29
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.3.1"
+        versionCode = 6
+        versionName = "1.4.0"
 
         val sourceUrl = providers.gradleProperty("detoxin.sourceUrl").getOrElse("")
         val supportUrl = providers.gradleProperty("detoxin.supportUrl").getOrElse("")

@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
+import com.detoxin.app.data.local.entity.Habit
 import com.detoxin.app.data.local.DatabaseProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,7 +33,8 @@ class ToggleHabitDayActionCallback : ActionCallback {
 
         withContext(Dispatchers.IO) {
             try {
-                DatabaseProvider.getDatabase(appContext).habitDao().toggleHabit(habitId, epochDay)
+                DatabaseProvider.getDatabase(appContext).habitDao()
+                    .toggleHabitStep(habitId, epochDay, Habit.isEveningOpen(epochDay, java.time.LocalDateTime.now()))
             } catch (e: SQLiteConstraintException) {
                 Log.w(TAG, "Habit $habitId no longer exists", e)
             }

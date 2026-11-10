@@ -9,6 +9,7 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
+import com.detoxin.app.data.local.entity.Habit
 import com.detoxin.app.data.local.DatabaseProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -34,7 +35,8 @@ class ToggleHabitActionCallback : ActionCallback {
         val today = LocalDate.now().toEpochDay()
         withContext(Dispatchers.IO) {
             try {
-                DatabaseProvider.getDatabase(appContext).habitDao().toggleHabit(habitId, today)
+                DatabaseProvider.getDatabase(appContext).habitDao()
+                    .toggleHabitStep(habitId, today, Habit.isEveningOpen(today, java.time.LocalDateTime.now()))
             } catch (e: SQLiteConstraintException) {
                 // Привычка удалена между отрисовкой и кликом: FK не даёт создать лог,
                 // виджет после обновления покажет состояние «удалена».

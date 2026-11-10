@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Detoxin</string>
     <string name="accessibility_service_label">Detoxin: защита от бесконечных лент</string>
-    <string name="accessibility_service_description">Detoxin закрывает YouTube Shorts, ленту и клипы ВКонтакте и следит за лимитами TikTok (15 мин в час, 1 ч в день) и YouTube (1.5 ч в день), а в режиме «Отбой» закрывает их на ночь. Все данные хранятся только на устройстве и никуда не передаются.</string>
+    <string name="accessibility_service_description">Detoxin закрывает YouTube Shorts, ленту и клипы ВКонтакте, полностью блокирует запуск и установку TikTok, YouTube и Яндекс Музыки, закрывает tiktok.com и youtube.com/shorts в браузере (для этого читается адресная строка), следит за дневными лимитами Reddit и Pinterest, а в режиме «Отбой» закрывает отслеживаемые приложения на ночь. Все данные хранятся только на устройстве и никуда не передаются.</string>
     <string name="overlay_limit_title">Дневной лимит %1$s (%2$s) исчерпан</string>
     <string name="overlay_limit_message">Приложение снова станет доступно после полуночи. До сброса лимита:</string>
     <string name="overlay_hourly_title">Часовой лимит %1$s (%2$s) исчерпан</string>

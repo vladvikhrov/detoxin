@@ -10,4 +10,16 @@ enum class BlockType {
     VK_FEED,
     VK_CLIPS,
     TIKTOK_TIMEOUT,
+
+    /** Запуск полностью заблокированного приложения (TikTok, YouTube, Яндекс Музыка). */
+    APP_BLOCKED,
+
+    /** Экран установки заблокированного приложения в магазине или установщике пакетов. */
+    INSTALL_BLOCKED,
+
+    /** tiktok.com, открытый в браузере. */
+    BROWSER_TIKTOK,
+
+    /** youtube.com/shorts, открытый в браузере. */
+    BROWSER_SHORTS,
 }

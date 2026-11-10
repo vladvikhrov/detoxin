@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.detoxin.app.bedtime.BedtimeRepository
 import com.detoxin.app.data.local.DatabaseProvider
 import com.detoxin.app.usage.UsageSync
+import com.detoxin.app.ui.score.DetoxScore
+import com.detoxin.app.ui.score.DetoxScoreCalculator
+import com.detoxin.app.util.DayRollover
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,10 +50,10 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     val selectedRange: StateFlow<AnalyticsRange> = _selectedRange.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val uiState: StateFlow<AnalyticsUiState> = _selectedRange
-        .flatMapLatest { range ->
+    val uiState: StateFlow<AnalyticsUiState> = combine(_selectedRange, DayRollover.dayFlow(application), ::Pair)
+        .flatMapLatest { (range, today) ->
+            // Дата приходит из потока смены дня: открытый в полночь экран сам переходит на новые сутки.
             val zone = ZoneId.systemDefault()
-            val today = LocalDate.now(zone)
             val startDay = today.minusDays(range.days - 1L)
             val start = startDay.toEpochDay()
             val end = today.toEpochDay()
@@ -110,6 +113,25 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             initialValue = null,
         )
+
+    /** Detox Score за последние 7 дней; пересчитывается при любом изменении данных и смене дня. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val scoreState: StateFlow<DetoxScore?> = DayRollover.dayFlow(application)
+        .flatMapLatest { today ->
+            val zone = ZoneId.systemDefault()
+            val first = today.minusDays(DetoxScoreCalculator.WINDOW_DAYS.toLong())
+            combine(
+                usageDao.observeLogsInRange(first.toEpochDay(), today.toEpochDay()),
+                protectionGapDao.observeOverlapping(first.atStartOfDay(zone).toInstant().toEpochMilli(), Long.MAX_VALUE),
+                habitDao.observeHabitsWithLogs(first.toEpochDay(), today.toEpochDay()),
+                BedtimeRepository.configFlow(application),
+            ) { logs, gaps, habits, bedtime ->
+                val now = System.currentTimeMillis()
+                DetoxScoreCalculator.compute(today, zone, now, bedtime.effectiveAt(now), logs, gaps, habits)
+            }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 
     fun selectRange(range: AnalyticsRange) {
         _selectedRange.value = range

@@ -6,13 +6,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,7 +35,8 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * Ряд из 7 последних дней на карточке привычки: касание отмечает или снимает отметку за
+ * Полоса из 7 последних дней на карточке привычки: сплошная шкала из семи сегментов, где
+ * выполненные дни залиты цветом привычки. Касание сегмента отмечает или снимает отметку за
  * этот день. Каждый день — отдельный чекбокс для TalkBack («Пятница, 10 октября, выполнено»),
  * область касания — вся колонка (не меньше 48dp по высоте).
  */
@@ -46,8 +48,8 @@ fun DayMarkStrip(
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
-    Row(modifier = modifier, horizontalArrangement = Arrangement.SpaceBetween) {
-        days.forEach { day ->
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(SEGMENT_GAP)) {
+        days.forEachIndexed { index, day ->
             val spoken = dayDescription(day.epochDay)
             Column(
                 modifier = Modifier
@@ -66,7 +68,7 @@ fun DayMarkStrip(
                         stateDescription = if (day.isCompleted) "выполнено" else "не выполнено"
                     },
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
             ) {
                 Text(
                     text = day.weekdayLabel,
@@ -74,26 +76,48 @@ fun DayMarkStrip(
                     fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Normal,
                     color = if (day.isToday) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                DayCircle(isCompleted = day.isCompleted, isToday = day.isToday, color = color)
+                DaySegment(
+                    isCompleted = day.isCompleted,
+                    isPartial = day.isPartial,
+                    isToday = day.isToday,
+                    color = color,
+                    shape = segmentShape(index, days.lastIndex),
+                )
             }
         }
     }
 }
 
+/** Крайние сегменты скруглены снаружи: семь сегментов читаются как одна полоса. */
+private fun segmentShape(index: Int, lastIndex: Int): RoundedCornerShape {
+    val outer = SEGMENT_HEIGHT / 2
+    val inner = 2.dp
+    return RoundedCornerShape(
+        topStart = if (index == 0) outer else inner,
+        bottomStart = if (index == 0) outer else inner,
+        topEnd = if (index == lastIndex) outer else inner,
+        bottomEnd = if (index == lastIndex) outer else inner,
+    )
+}
+
 @Composable
-private fun DayCircle(isCompleted: Boolean, isToday: Boolean, color: Color) {
-    val outline = if (isToday) 2.dp else 1.5.dp
+private fun DaySegment(isCompleted: Boolean, isPartial: Boolean, isToday: Boolean, color: Color, shape: RoundedCornerShape) {
+    val fill by animateColorAsState(
+        targetValue = when {
+            isCompleted -> color
+            isPartial -> color.copy(alpha = 0.45f)
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        },
+        animationSpec = tween(FILL_ANIMATION_MS),
+        label = "daySegment",
+    )
     Box(
         modifier = Modifier
-            .size(26.dp)
-            .background(if (isCompleted) color else Color.Transparent, CircleShape)
-            .border(outline, color.copy(alpha = if (isCompleted || isToday) 1f else OUTLINE_ALPHA), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (isCompleted) {
-            Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-        }
-    }
+            .fillMaxWidth()
+            .height(SEGMENT_HEIGHT)
+            .background(fill, shape)
+            .then(if (isToday && !isCompleted) Modifier.border(1.5.dp, color, shape) else Modifier),
+    )
 }
 
 /** «Пятница, 10 октября» — для TalkBack и подписей. */
@@ -104,4 +128,6 @@ internal fun dayDescription(epochDay: Long, locale: Locale = Locale.getDefault()
     return "$weekday, ${date.format(DateTimeFormatter.ofPattern("d MMMM", locale))}"
 }
 
-private const val OUTLINE_ALPHA = 0.55f
+private val SEGMENT_HEIGHT = 10.dp
+private val SEGMENT_GAP = 3.dp
+private const val FILL_ANIMATION_MS = 250

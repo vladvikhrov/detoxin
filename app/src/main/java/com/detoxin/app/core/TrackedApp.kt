@@ -30,6 +30,22 @@ enum class TrackedApp(
         limitLabel = "1.5 ч",
         hourlyLimitMs = null,
         hourlyLimitLabel = null,
+    ),
+    REDDIT(
+        packageName = "com.reddit.frontpage",
+        displayName = "Reddit",
+        dailyLimitMs = 30L * 60L * 1_000L,
+        limitLabel = "30 мин",
+        hourlyLimitMs = null,
+        hourlyLimitLabel = null,
+    ),
+    PINTEREST(
+        packageName = "com.pinterest",
+        displayName = "Pinterest",
+        dailyLimitMs = 30L * 60L * 1_000L,
+        limitLabel = "30 мин",
+        hourlyLimitMs = null,
+        hourlyLimitLabel = null,
     );
 
     companion object {
@@ -37,7 +53,7 @@ enum class TrackedApp(
 
         val packageNames: Set<String> = entries.map { it.packageName }.toSet()
 
-        /** Суммарный суточный бюджет всех отслеживаемых приложений (2 ч 30 мин). */
+        /** Суммарный суточный бюджет всех отслеживаемых приложений (3 ч 30 мин). */
         val combinedDailyLimitMs: Long = entries.sumOf { it.dailyLimitMs }
 
         fun fromPackage(packageName: String?): TrackedApp? = packageName?.let(byPackage::get)

@@ -1,5 +1,6 @@
 package com.detoxin.app.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -20,4 +21,20 @@ data class ProtectionGap(
     val id: Long = 0,
     val startedAtWall: Long,
     val endedAtWall: Long?,
+    /** Причина разрыва ([ProtectionGapReason.key]); `defaultValue` совпадает с DDL миграции 3→4. */
+    @ColumnInfo(defaultValue = "SERVICE_OFF")
+    val reason: String = ProtectionGapReason.SERVICE_OFF.key,
 )
+
+/** Почему защита не работала. В базе хранится стабильная строка [key]. */
+enum class ProtectionGapReason(val key: String, val title: String) {
+    /** Служба специальных возможностей выключена или процесс убит. */
+    SERVICE_OFF("SERVICE_OFF", "Защита выключена"),
+
+    /** Экстренная разблокировка, включённая пользователем после PIN и контрольной фразы. */
+    EMERGENCY("EMERGENCY", "Экстренная разблокировка");
+
+    companion object {
+        fun fromKey(key: String?): ProtectionGapReason = entries.firstOrNull { it.key == key } ?: SERVICE_OFF
+    }
+}

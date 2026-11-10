@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,6 +53,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.res.painterResource
 import com.detoxin.app.R
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import com.detoxin.app.ui.score.DetoxScore
+import com.detoxin.app.ui.score.DetoxScoreGauge
 import com.detoxin.app.ui.analytics.components.HabitHeatmap
 import com.detoxin.app.ui.common.charts.LineSeries
 import com.detoxin.app.ui.common.charts.ReferenceLine
@@ -66,7 +73,11 @@ fun AnalyticsScreen(
     viewModel: AnalyticsViewModel = viewModel(),
     onOpenPermissions: () -> Unit = {},
     onOpenBedtime: () -> Unit = {},
+    onOpenProtection: () -> Unit = {},
+    onOpenRelapse: () -> Unit = {},
+    onOpenShare: () -> Unit = {},
 ) {
+    val score by viewModel.scoreState.collectAsStateWithLifecycle()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val night by viewModel.nightState.collectAsStateWithLifecycle()
     val range by viewModel.selectedRange.collectAsStateWithLifecycle()
@@ -85,6 +96,10 @@ fun AnalyticsScreen(
         usageAccessGranted = permissions.usageAccessGranted,
         onOpenPermissions = onOpenPermissions,
         onOpenBedtime = onOpenBedtime,
+        score = score,
+        onOpenProtection = onOpenProtection,
+        onOpenRelapse = onOpenRelapse,
+        onOpenShare = onOpenShare,
     )
 }
 
@@ -98,6 +113,10 @@ fun AnalyticsContent(
     usageAccessGranted: Boolean = true,
     onOpenPermissions: () -> Unit = {},
     onOpenBedtime: () -> Unit = {},
+    score: DetoxScore? = null,
+    onOpenProtection: () -> Unit = {},
+    onOpenRelapse: () -> Unit = {},
+    onOpenShare: () -> Unit = {},
 ) {
     Scaffold { innerPadding ->
         Column(
@@ -113,7 +132,11 @@ fun AnalyticsContent(
                 IconButton(onClick = onOpenBedtime) {
                     Icon(painterResource(R.drawable.ic_bedtime), contentDescription = "Режим «Отбой»")
                 }
+                IconButton(onClick = onOpenProtection) {
+                    Icon(Icons.Filled.Lock, contentDescription = "Защита")
+                }
             }
+            if (score != null) ScoreCard(score, onOpenRelapse, onOpenShare)
             if (!protectionEnabled) {
                 PermissionBanner(
                     title = "Защита выключена",
@@ -138,6 +161,48 @@ fun AnalyticsContent(
             }
             if (night != null) NightCard(night)
             HealthFooter()
+        }
+    }
+}
+
+@Composable
+private fun ScoreCard(score: DetoxScore, onOpenRelapse: () -> Unit, onOpenShare: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Detox Score · 7 дней", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            DetoxScoreGauge(score = score.total, modifier = Modifier.fillMaxWidth(0.7f))
+            Text(score.verdict, style = MaterialTheme.typography.titleMedium)
+            // Составляющие — отдельными колонками: одной строкой через «·» они переносились.
+            Row(modifier = Modifier.fillMaxWidth()) {
+                listOfNotNull(
+                    "${(score.limits * 100).roundToInt()}%" to "лимиты",
+                    score.bedtime?.let { "${(it * 100).roundToInt()}%" to "отбой" },
+                    score.habits?.let { "${(it * 100).roundToInt()}%" to "привычки" },
+                    ("−${score.penalty}" to "срывы").takeIf { score.penalty > 0 },
+                ).forEach { (value, label) ->
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(value, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onOpenRelapse) { Text("Стена стыда") }
+                TextButton(onClick = onOpenShare) { Text("Карточка итогов") }
+            }
         }
     }
 }
@@ -355,9 +420,12 @@ private fun NightCard(night: NightStatsUiState) {
 
 @Composable
 private fun SummaryRow(summary: AnalyticsSummary) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         SummaryTile(
-            label = "Экранное время",
+            label = "Время",
             value = formatDuration(summary.totalScreenTimeMs),
             modifier = Modifier.weight(1f),
         )
@@ -383,11 +451,17 @@ private fun SummaryTile(
     caption: String? = null,
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.fillMaxHeight(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(value, style = MaterialTheme.typography.titleLarge)
             if (caption != null) {
                 Text(caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
