@@ -2,7 +2,7 @@
 
 # Detoxin
 
-**Умный цифровой детокс без слежки · Smart digital detox without tracking**
+**Умный цифровой детокс без слежки**
 
 ![Network](https://img.shields.io/badge/network-0%20kb-2ea44f)
 ![minSdk](https://img.shields.io/badge/minSdk-29-3ddc84?logo=android&logoColor=white)
@@ -11,15 +11,11 @@
 ![Pure Canvas](https://img.shields.io/badge/charts-pure%20Canvas-ff7043)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 
-[Русский](#русский) · [English](#english)
-
 </div>
 
 ---
 
-## Русский
-
-### Идея
+## Идея
 
 Detoxin обрывает бесконечные ленты, но не отбирает телефон целиком.
 
@@ -32,14 +28,14 @@ Detoxin обрывает бесконечные ленты, но не отбир
 - **Подводит итоги**: Detox Score за 7 дней, «Стена стыда» со срывами и карточка итогов, которую можно сохранить картинкой.
 - **Помогает** вырабатывать привычки: стрики, темп месяц к месяцу, линия динамики, матрица дней недели, отметки задним числом (до 60 дней), привычки «два раза в день» (утро и вечер, вечер с 15:00), автопривычка «Лёг вовремя», резервная копия базы в файл и виджеты: 30-дневный цикл (например, для контактных линз), «Неделя привычки» с отметкой любого из 7 дней и «Сегодня» с временем TikTok и YouTube относительно лимитов.
 
-### Приватность
+## Приватность
 
 - В приложении **нет разрешения `INTERNET`**, передавать данные ему физически нечем.
 - Нет аналитики, рекламы и телеметрии.
 - Все данные хранятся в локальной базе SQLite на устройстве и не попадают в облачные резервные копии (`allowBackup=false`).
 - Подробно: [политика конфиденциальности](PRIVACY.md).
 
-### Установка
+## Установка
 
 **Готовый APK.** Скачайте файл `detoxin-vX.Y.apk` из раздела [Releases](https://github.com/vladvikhrov/detoxin/releases) и откройте его на телефоне.
 
@@ -64,7 +60,7 @@ cd detoxin
 
 Без `keystore.properties` release-сборка подписывается debug-ключом, поэтому проект собирается сразу после клонирования.
 
-### Поддержать автора
+## Поддержать автора
 
 Detoxin бесплатный и без рекламы. Если он вам помог:
 
@@ -74,78 +70,42 @@ Detoxin бесплатный и без рекламы. Если он вам по
 
 ---
 
-## English
+## Архитектура
 
-### The idea
-
-Detoxin cuts infinite feeds without taking your phone away.
-
-- **Blocks** YouTube Shorts (navigates back) and VK "Clips" and "Feed" (switches to Messenger).
-- **Keeps** what you actually came for: VK messages, your profile and regular long-form YouTube videos.
-- **Limits** TikTok (15 min per hour, 1 h per day) and YouTube (1.5 h per day) with a rest screen and countdown.
-- **Sends you to bed**: Bedtime mode closes TikTok and YouTube overnight (with an optional night allowance of up to 15 min), the daily limit no longer resets at midnight, and settings can only be made stricter at night. If protection gets switched off, Detoxin reports how much TikTok time followed once it is back on.
-- **Fully blocks** TikTok, YouTube and Yandex Music (on by default): closes the app itself, its install page in app stores and the TikTok site or YouTube Shorts in the browser. Blocking can only be switched off on the Protection screen after a PIN and a commitment phrase.
-- **Measures time accurately** from Android's own usage statistics, like Digital Wellbeing.
-- **Sums things up**: a 7-day Detox Score, a "wall of shame" with relapses and a summary card you can save as an image.
-- **Builds** habits: streaks, month-over-month pace, a trend line, a weekday matrix, backfilling past days (up to 60), twice-a-day habits (morning and evening, evening from 3 pm), database backup to a file, an automatic "In bed on time" habit and home-screen widgets: a 30-day cycle (e.g. for contact lenses), a "Habit week" strip to tick any of the last 7 days, and "Today" with TikTok/YouTube time against the limits.
-
-### Privacy
-
-- The app has **no `INTERNET` permission**, so it has no way to send anything.
-- No analytics, ads or telemetry.
-- All data lives in a local SQLite database on the device and is excluded from cloud backups (`allowBackup=false`).
-- Details: [privacy policy](PRIVACY.md).
-
-### Install
-
-**Prebuilt APK.** Download `detoxin-vX.Y.apk` from [Releases](https://github.com/vladvikhrov/detoxin/releases) and open it on your phone. Then enable the Detoxin accessibility service, grant usage access, allow "Display over other apps" and add the "Detoxin habit" widget. The app explains each permission on first launch.
-
-**Build from source** (JDK 17+ and Android SDK):
-
-```bash
-git clone https://github.com/vladvikhrov/detoxin.git
-cd detoxin
-./scripts/generate-release-keystore.sh   # optional: your own signing key
-./gradlew assembleRelease
-```
-
-Without `keystore.properties`, the release build is signed with the debug key, so a fresh clone builds as is.
-
-### Support the author
-
-Detoxin is free and ad-free. If it helped you, see the links in the Russian section above.
-
----
-
-## Architecture · Архитектура
-
-| Layer | Technology |
+| Слой | Технологии |
 |---|---|
-| Interception | `AccessibilityService`: DFS over the node tree (depth ≤ 8, `recycle()` on API < 34), CONFLATED scan channel, 1200 ms anti-loop suppression window |
-| Screen time | `UsageStatsManager` sessions (per-activity tracking), cursor-based sync into Room with midnight splitting; hourly, daily and bedtime limits |
-| Bedtime | Pure `BedtimePolicy` (DST-safe windows, stricter-only changes at night), DataStore settings, inexact `setAndAllowWhileIdle` alarms, protection-gap tracking with heartbeat |
-| Storage | Room 2.6 + KSP, Flow, explicit migrations (no destructive fallback) |
-| UI | Jetpack Compose, Material 3, bottom navigation |
-| Charts | Pure Compose Canvas: multi-series trend lines with monotone cubic Hermite splines (Fritsch–Carlson), gaps, reference lines and trend badges; heatmap, weekday frequency bars; geometry cached in `drawWithCache` |
-| Widgets | Glance 1.1.0: 1×1 procedural 30-segment dial (`android.graphics.Canvas` → `Bitmap`), resizable 7-day habit strip, screen-time widget refreshed after each usage sync |
-| Release | R8 minification and resource shrinking, APK ≈ 3.5 MB; tag-triggered GitHub Actions build |
+| Перехват | `AccessibilityService`: обход дерева узлов в глубину (до 8 уровней, `recycle()` на API < 34), канал сканирования CONFLATED, окно подавления 1200 мс против зацикливания; детекторы адресной строки браузеров и экранов установки в магазинах |
+| Защита | Полная блокировка приложений, мастер-PIN (PBKDF2 с солью), контрольная фраза, экстренная разблокировка по монотонным часам |
+| Экранное время | Сессии `UsageStatsManager` (по активити), синхронизация в Room по курсору с разрезом по полуночи; часовые, суточные и ночные лимиты |
+| Отбой | Чистая `BedtimePolicy` (окна с учётом перехода на летнее время, ночью настройки можно только ужесточить), настройки в DataStore, будильники `setAndAllowWhileIdle`, учёт периодов без защиты по heartbeat |
+| Хранение | Room 2.6 + KSP, Flow, явные миграции без destructive fallback, экспорт и импорт базы через SAF |
+| Интерфейс | Jetpack Compose, Material 3, нижняя навигация |
+| Графики | Чистый Compose Canvas: линии тренда с монотонными кубическими сплайнами Эрмита (Fritsch–Carlson), разрывы, линии лимита и бейджи тренда; тепловая карта, частота по дням недели, шкала Detox Score; геометрия кэшируется в `drawWithCache` |
+| Виджеты | Glance 1.1.0: кольцо прогресса цикла 1×1 (`android.graphics.Canvas` → `Bitmap`), растягиваемая полоса привычки на 7 дней, виджет экранного времени, который обновляется после каждой синхронизации |
+| Релиз | Минификация R8 и сжатие ресурсов, APK ≈ 4 МБ; сборка в GitHub Actions по тегу |
 
 ```
 app/src/main/java/com/detoxin/app/
-├── bedtime/         Bedtime settings, alarms, notifications, auto habit
-├── core/            TrackedApp: limits for tracked apps
-├── data/local/      Room: entities, DAO, DTO, migrations
-├── service/         AccessibilityService, usage tracker, detectors
-├── overlay/         Blocking overlay (WindowManager)
-├── ui/analytics/    Screen time dashboard, night stats
-├── ui/bedtime/      Bedtime settings screen
-├── ui/common/       Shared Canvas trend-line chart
-├── ui/habits/       Habit hub, stats, calendar, Canvas charts
-├── usage/           Usage stats, budget, BedtimePolicy
-├── ui/widget/       Glance widget, dial renderer, actions
-└── util/            AppHealthMonitor, ExternalLinks
+├── bedtime/         Отбой: настройки, будильники, уведомления, автопривычка
+├── core/            TrackedApp и HardBlockedApp: лимиты и полная блокировка
+├── data/local/      Room: сущности, DAO, DTO, миграции, резервная копия
+├── guard/           Защита от самосаботажа: PIN, контрольная фраза
+├── service/         AccessibilityService, учёт времени, детекторы
+├── overlay/         Экран блокировки (WindowManager)
+├── ui/analytics/    Экранное время, ночная статистика
+├── ui/bedtime/      Экран настроек отбоя
+├── ui/common/       Общий Canvas-график линий тренда
+├── ui/guard/        Диалог PIN-кода и контрольной фразы
+├── ui/habits/       Привычки: список, статистика, календарь, графики
+├── ui/protection/   Экран «Защита»
+├── ui/relapse/      «Стена стыда»
+├── ui/score/        Detox Score: расчёт и шкала
+├── ui/share/        Карточка итогов
+├── ui/widget/       Glance-виджеты, отрисовка кольца, действия
+├── usage/           Статистика использования, бюджет, BedtimePolicy
+└── util/            AppHealthMonitor, ExternalLinks, DayRollover
 ```
 
-## License
+## Лицензия
 
-Copyright 2026 vladvikhrov. Licensed under the [Apache License 2.0](LICENSE); redistributions must keep the [NOTICE](NOTICE) file.
+Copyright 2026 vladvikhrov. Распространяется по [лицензии Apache 2.0](LICENSE); при распространении сохраняйте файл [NOTICE](NOTICE).
