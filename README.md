@@ -27,8 +27,10 @@ Detoxin обрывает бесконечные ленты, но не отбир
 - **Сохраняет** то, ради чего вы открыли приложение: сообщения ВКонтакте, профиль и обычные длинные видео на YouTube.
 - **Ограничивает** TikTok (15 минут в час и 1 час в день) и YouTube (1.5 часа в день) экраном отдыха с обратным отсчётом.
 - **Укладывает спать**: режим «Отбой» закрывает TikTok и YouTube на ночь (с необязательным ночным лимитом до 15 минут), дневной лимит не обнуляется в полночь, а ослабить настройки ночью нельзя — только с утра. Если выключить защиту, Detoxin после включения покажет, сколько времени ушло на TikTok.
+- **Блокирует полностью** TikTok, YouTube и Яндекс Музыку (по умолчанию): закрывает само приложение, страницу его установки в магазинах и сайт TikTok или YouTube Shorts в браузере. Выключить блокировку можно только на экране «Защита» после PIN-кода и контрольной фразы.
 - **Считает время честно** — по системной статистике Android, как «Цифровое благополучие».
-- **Помогает** вырабатывать привычки: стрики, темп месяц к месяцу, линия динамики, матрица дней недели, отметки задним числом (до 60 дней), автопривычка «Лёг вовремя» и виджеты: 30-дневный цикл (например, для контактных линз), «Неделя привычки» с отметкой любого из 7 дней и «Сегодня» с временем TikTok и YouTube относительно лимитов.
+- **Подводит итоги**: Detox Score за 7 дней, «Стена стыда» со срывами и карточка итогов, которую можно сохранить картинкой.
+- **Помогает** вырабатывать привычки: стрики, темп месяц к месяцу, линия динамики, матрица дней недели, отметки задним числом (до 60 дней), привычки «два раза в день» (утро и вечер, вечер с 15:00), автопривычка «Лёг вовремя», резервная копия базы в файл и виджеты: 30-дневный цикл (например, для контактных линз), «Неделя привычки» с отметкой любого из 7 дней и «Сегодня» с временем TikTok и YouTube относительно лимитов.
 
 ### Приватность
 
@@ -82,8 +84,10 @@ Detoxin cuts infinite feeds without taking your phone away.
 - **Keeps** what you actually came for: VK messages, your profile and regular long-form YouTube videos.
 - **Limits** TikTok (15 min per hour, 1 h per day) and YouTube (1.5 h per day) with a rest screen and countdown.
 - **Sends you to bed**: Bedtime mode closes TikTok and YouTube overnight (with an optional night allowance of up to 15 min), the daily limit no longer resets at midnight, and settings can only be made stricter at night. If protection gets switched off, Detoxin reports how much TikTok time followed once it is back on.
+- **Fully blocks** TikTok, YouTube and Yandex Music (on by default): closes the app itself, its install page in app stores and the TikTok site or YouTube Shorts in the browser. Blocking can only be switched off on the Protection screen after a PIN and a commitment phrase.
 - **Measures time accurately** from Android's own usage statistics, like Digital Wellbeing.
-- **Builds** habits: streaks, month-over-month pace, a trend line, a weekday matrix, backfilling past days (up to 60), an automatic "In bed on time" habit and home-screen widgets: a 30-day cycle (e.g. for contact lenses), a "Habit week" strip to tick any of the last 7 days, and "Today" with TikTok/YouTube time against the limits.
+- **Sums things up**: a 7-day Detox Score, a "wall of shame" with relapses and a summary card you can save as an image.
+- **Builds** habits: streaks, month-over-month pace, a trend line, a weekday matrix, backfilling past days (up to 60), twice-a-day habits (morning and evening, evening from 3 pm), database backup to a file, an automatic "In bed on time" habit and home-screen widgets: a 30-day cycle (e.g. for contact lenses), a "Habit week" strip to tick any of the last 7 days, and "Today" with TikTok/YouTube time against the limits.
 
 ### Privacy
 
