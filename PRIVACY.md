@@ -54,6 +54,17 @@ Detoxin **не имеет доступа в интернет** (в прилож�
 
 Разрешение `ACCESS_NETWORK_STATE`, которое библиотека добавляет по умолчанию, из приложения намеренно удалено.
 
+## Сводка для дневника Retox (с версии 1.5.0)
+
+Detoxin может отдавать **сводку по дням** дневнику Retox, если он установлен на этом же телефоне:
+минуты в отслеживаемых приложениях за день, минуты ночью в окне «Отбоя», соблюдён ли отбой и во сколько
+последний раз открывались приложения, сколько раз выключалась защита и сколько было блокировок.
+Названия приложений, отдельные сессии, привычки и PIN не передаются.
+
+Сводка доступна только через локальный ContentProvider с разрешением уровня `signature`: Android
+открывает его лишь приложениям, подписанным тем же ключом, что и Detoxin. Другие приложения, в том
+числе с правами отладки, получают отказ. Данные не покидают телефон: у обоих приложений нет доступа в интернет.
+
 ## Файлы, которые создаёте вы
 
 - **Карточка итогов** сохраняется по вашей команде как PNG в папку `Pictures/Detoxin` через MediaStore. Разрешение на доступ к хранилищу не нужно; файл никуда не отправляется.
@@ -81,6 +92,8 @@ Detoxin has **no Internet permission**, no analytics, ads or tracking SDKs. Habi
 The accessibility service, enabled only by you, receives events from all apps but immediately drops any event whose package is not on its list. It inspects on-screen UI elements only in YouTube, VK, TikTok and Yandex Music (to detect Shorts/Clips/Feed and close them, show the limit screen, or close fully blocked apps), in known browsers (**only the address bar text**, to close the TikTok site and YouTube Shorts; page contents are not read and URLs are not stored) and in app stores and package installers (to close the TikTok/YouTube/Yandex Music install page). While TikTok or YouTube is open it checks once per second which app (package name only) is in the foreground. Messages, comments, passwords and data of other apps are never read, stored or transmitted.
 
 Version 1.4.0 also stores, on the device only: the habit type (once or twice a day) with morning/evening check-ins, block events for browser and install-page blocks (without URLs), and for the Protection screen a salted PBKDF2 hash of your master PIN (the PIN itself is never stored), full-block toggles and the emergency-unlock deadline. The summary card is saved, when you ask, as a PNG to `Pictures/Detoxin`; database backups are exported and imported through the system file picker to a location you choose.
+
+Since 1.5.0 Detoxin can share a **per-day summary** with the Retox diary on the same phone (minutes in tracked apps, night minutes within the Bedtime window, whether Bedtime was kept and when tracked apps were last opened, protection-off and block counts — no app names, sessions, habits or PIN). It is exposed only through a local ContentProvider guarded by a `signature`-level permission, so Android grants it only to apps signed with the same key as Detoxin; neither app has Internet access.
 
 Other permissions: `SYSTEM_ALERT_WINDOW` for the rest screen, `VIBRATE` for widget haptics, `POST_NOTIFICATIONS` (Android 13+, asked when Bedtime is enabled) for the bedtime reminder and the protection-off report, `RECEIVE_BOOT_COMPLETED` to restore Bedtime alarms after a reboot; `WAKE_LOCK` and `FOREGROUND_SERVICE` are added by AndroidX WorkManager for widget updates. The source code link opens in your own browser.
 

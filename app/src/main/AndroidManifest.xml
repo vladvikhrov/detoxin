@@ -21,12 +21,25 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
+    <!-- Мост для дневника Retox: читать сводку может только приложение с той же подписью. -->
+    <permission
+        android:name="com.detoxin.app.permission.READ_DAY_SUMMARY"
+        android:label="Сводка Detoxin по дням"
+        android:protectionLevel="signature" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true">
+
+        <provider
+            android:name=".bridge.SummaryProvider"
+            android:authorities="com.detoxin.app.summary"
+            android:exported="true"
+            android:readPermission="com.detoxin.app.permission.READ_DAY_SUMMARY"
+            android:writePermission="com.detoxin.app.permission.READ_DAY_SUMMARY" />
 
         <activity
             android:name=".MainActivity"
